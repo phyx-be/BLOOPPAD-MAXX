@@ -1,0 +1,969 @@
+#include <ch32x035.h> /* both X033 and X035 */
+#include <stdlib.h>   /* atoi() */
+#include <string.h>   /* memset() */
+
+#include <wch_usbmidi_internal.h>
+
+/* we use our own custom debug lib */
+#include "debug.h"
+
+/* digital inputs (button matrix, encoders) */
+#define ROW0_PORT GPIOB // PB12: Row 0
+#define ROW0_PIN  GPIO_Pin_12
+#define ROW1_PORT GPIOB // PB11: Row 1
+#define ROW1_PIN  GPIO_Pin_11
+#define ROW2_PORT GPIOB // PB10: Row 2
+#define ROW2_PIN  GPIO_Pin_10
+#define ROW3_PORT GPIOB // PB9: Row 3
+#define ROW3_PIN  GPIO_Pin_9
+#define ROW4_PORT GPIOB // PB8: Row 4
+#define ROW4_PIN  GPIO_Pin_8
+#define ROW5_PORT GPIOB // PB7: Row 5
+#define ROW5_PIN  GPIO_Pin_7
+#define ROW6_PORT GPIOB // PB6: Row 6
+#define ROW6_PIN  GPIO_Pin_6
+#define ROW7_PORT GPIOB // PB5: Row 7
+#define ROW7_PIN  GPIO_Pin_5
+#define N_ROWS    (8)
+
+/* digital outputs (button matrix, WS2812 LEDs) */
+#define COL0_PORT GPIOC // PC0: Col 0
+#define COL0_PIN  GPIO_Pin_0
+#define COL1_PORT GPIOC // PC3: Col 1
+#define COL1_PIN  GPIO_Pin_3
+#define COL2_PORT GPIOA // PA0: Col 2
+#define COL2_PIN  GPIO_Pin_0
+#define COL3_PORT GPIOA // PA1: Col 3
+#define COL3_PIN  GPIO_Pin_1
+#define COL4_PORT GPIOA // PA2: Col 4
+#define COL4_PIN  GPIO_Pin_2
+#define COL5_PORT GPIOA // PA3: Col 5
+#define COL5_PIN  GPIO_Pin_3
+#define COL6_PORT GPIOA // PA4: Col 6
+#define COL6_PIN  GPIO_Pin_4
+#define COL7_PORT GPIOA // PA5: Col 7
+#define COL7_PIN  GPIO_Pin_5
+#define N_COLS    (8)
+
+#define TIMER_FREQ ((SystemCoreClock / 10000) - 1) /* the output frequency of all timers: 100Hz */
+
+#define LED_PORT         GPIOA // PA7: WS2812 leds (SPI1 MOSI)
+#define LED_PIN          GPIO_Pin_7
+#define LEDS_NUM         (N_ROWS * N_COLS)
+#define Pixel_PRE_LEN    (12u)
+#define Pixel_RESET_LEN  (25u)
+#define COLOR_BUFFER_LEN (((LEDS_NUM * 3) * Pixel_PRE_LEN) + Pixel_RESET_LEN)
+#define SPI1_DMA_TX_CH   DMA1_Channel3
+
+/* I2C on the expansion connector towards the badge */
+#define SDA_PORT         GPIOC
+#define SDA_PIN          GPIO_Pin_18
+#define SCL_PORT         GPIOC
+#define SCL_PIN          GPIO_Pin_19
+#define I2C_ADDRESS      (0x55)
+#define I2C_TIMEOUT      (-2)
+#define I2C_TIMEOUT_TICK (1000)
+#define I2C_SPEED        (400000)
+#define UART_BAUDRATE    (115200)
+
+/* midi-usb */
+#define MIDI_CHANNEL (0)
+#define MIDI_MAX     (0x7f)
+
+/* 3 bytes: version number
+ * 1 byte: button matrix state
+ * 2 * ADC_CHANNELS bytes: 1 analog input is 16 bit
+ * 2 bytes: left encoder value
+ * 2 bytes: right encoder value
+ * 3 * LEDS_NUM bytes: red, green, blue value for each LED
+ * */
+#define RESULT_BUFFER_SIZE (3 + N_COLS + (LEDS_NUM * 3))
+#define RESULT_RW_OFFSET   (3 + N_COLS)
+
+/* array to map a button to a note */
+static const uint8_t button_note[N_COLS][N_ROWS] = {
+    {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27}, // col 0
+    {0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37}, // col 1
+    {0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47}, // col 2
+    {0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57}, // col 3
+    {0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67}, // col 4
+    {0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77}, // col 5
+    {0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87}, // col 6
+    {0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97}, // col 7
+};
+
+#define BASE_NOTE_LEDS (0x20)
+
+typedef struct
+{
+    uint8_t g; // Green
+    uint8_t r; // Red
+    uint8_t b; // Blue
+} ws2812b_color_t;
+
+static const ws2812b_color_t mixxx_palette[] = {
+    {.g = 0x0a, .r = 0xc5, .b = 0x08},
+    {.g = 0xbe, .r = 0x32, .b = 0x44},
+    {.g = 0xd4, .r = 0x42, .b = 0xf4},
+    {.g = 0xd2, .r = 0xf8, .b = 0x00},
+    {.g = 0x44, .r = 0x00, .b = 0xff},
+    {.g = 0x00, .r = 0xaf, .b = 0xcc},
+    {.g = 0xa6, .r = 0xfc, .b = 0xd7},
+    {.g = 0xf2, .r = 0xf2, .b = 0xff},
+    {.g = 0x80, .r = 0xff, .b = 0x00},
+};
+
+/*
+ * This struct contains all data that is available through I2C.
+ * Use the following command with a Buspirate to test:
+ * read version number : [ 0x72 0x00 [ 0x73 r:3 ]
+ * read matrix state : [ 0x72 0x03 [ 0x73 r:1 ]
+ * read analog inputs : [ 0x72 0x04 [ 0x73 r:16 ]
+ * read buttons and analog inputs : [ 0x72 0x03 [ 0x73 r:17 ]
+ * read left encoder : [ 0x72 0x14 [ 0x73 r:1 ]
+ * read right encoder : [ 0x72 0x15 [ 0x73 r:1 ]
+ * read both encoders : [ 0x72 0x14 [ 0x73 r:2 ]
+ * turn on all leds : [ 0x72 0x16 0xFF:24 ]
+ * turn off all leds : [ 0x72 0x16 0x00:24 ]
+ * read everything : [ 0x72 0x00 [ 0x73 r:46 ]
+ */
+typedef struct __attribute__((packed))
+{
+    uint8_t version[3];             // version number
+    uint8_t matrix_state[N_COLS];   // reference to the button state byte in the result buffer
+    ws2812b_color_t leds[LEDS_NUM]; // reference to the LED data in the result buffer
+} addon_data_t;
+
+_Static_assert(sizeof(addon_data_t) == RESULT_BUFFER_SIZE, "raw data and struct size are not aligned!");
+
+typedef struct
+{
+    uint8_t flag_update_leds : 1;      // flag to indicate that the LEDs have to be updated with a new value from I2C/USB-MIDI
+    uint8_t flag_matrix_scan_done : 1; // flag to indicate that the button matrix state has changed
+    uint8_t reserved : 6;              // reserved for future use
+    uint8_t raw_data_ptr;              // current index in the raw_data buffer to read/write using I2C
+    union
+    {
+        addon_data_t data;
+        uint8_t raw_data[RESULT_BUFFER_SIZE];
+    };
+} addon_state_t;
+
+/* Global Variables */
+static addon_state_t state;
+
+/* buffer to hold the SPI data for WS28212 */
+static uint8_t color_buf[COLOR_BUFFER_LEN] = {0};
+
+static void USART3_Output_Init(uint32_t baudrate)
+{
+    GPIO_InitTypeDef GPIO_InitStructure;
+    USART_InitTypeDef USART_InitStructure;
+
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4; // PB3 (TX) PB4 (RX)
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+    GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+    USART_InitStructure.USART_BaudRate = baudrate;
+    USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+    USART_InitStructure.USART_StopBits = USART_StopBits_1;
+    USART_InitStructure.USART_Parity = USART_Parity_No;
+    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+
+    USART_Init(USART3, &USART_InitStructure);
+    USART_Cmd(USART3, ENABLE);
+}
+
+/*********************************************************************
+ * @fn      convToBit
+ *
+ * @brief   Convert hex to spi bit
+ *
+ * @param   res  - the result
+ *          input - input data
+ *
+ * @return  none
+ */
+static void convToBit(uint8_t *res, uint8_t input)
+{
+    uint8_t mask = 0x80;
+    for (int i = 0; i < 4; i++)
+    {
+        uint8_t result = (input & mask) ? 0xE : 0x8;
+        result <<= 4;
+        mask >>= 1;
+        result |= (input & mask) ? 0xE : 0x8;
+        mask >>= 1;
+        res[i] = result;
+    }
+}
+
+/*********************************************************************
+ * @fn      colorToBit
+ *
+ * @brief   Convert color to spi bit
+ *
+ * @param   buf  - the result
+ *          r  - red channel
+ *          g  - green channel
+ *          b  - blue channel
+ *
+ * @return  none
+ */
+static void colorToBit(uint8_t *buf, uint8_t r, uint8_t g, uint8_t b)
+{
+    uint8_t *res = buf;
+    convToBit(res, g);
+    convToBit(&(res[4]), r);
+    convToBit(&(res[8]), b);
+}
+
+/*********************************************************************
+ * @fn      setPixelColor
+ *
+ * @brief   Set the pixel color of an LED
+ *
+ * @param   index - index of LED
+ *          r  - red channel
+ *          g  - green channel
+ *          b  - blue channel
+ *
+ *
+ * @return  none
+ */
+static void setPixelColor(uint16_t index, uint8_t r, uint8_t g, uint8_t b)
+{
+    uint8_t *buf = &(color_buf[index * Pixel_PRE_LEN]);
+    colorToBit(buf, r, g, b);
+}
+
+/*********************************************************************
+ * @fn      SPI_1Lines_HalfDuplex_Init
+ *
+ * @brief   Configuring the SPI for half-duplex communication.
+ *
+ * @return  none
+ */
+void SPI_1Lines_HalfDuplex_Init(void)
+{
+    GPIO_InitTypeDef GPIO_InitStructure = {0};
+    SPI_InitTypeDef SPI_InitStructure = {0};
+
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_SPI1, ENABLE);
+
+    GPIO_InitStructure.GPIO_Pin = LED_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(LED_PORT, &GPIO_InitStructure);
+
+    SPI_InitStructure.SPI_Direction = SPI_Direction_1Line_Tx;
+    SPI_InitStructure.SPI_Mode = SPI_Mode_Master;
+    SPI_InitStructure.SPI_DataSize = SPI_DataSize_8b;
+    SPI_InitStructure.SPI_CPOL = SPI_CPOL_High;
+    SPI_InitStructure.SPI_CPHA = SPI_CPHA_1Edge;
+    SPI_InitStructure.SPI_NSS = SPI_NSS_Soft;
+    SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16; // TODO: check if we are at 6M with this, or use SPI_BaudRatePrescaler_8?
+    SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;
+    SPI_InitStructure.SPI_CRCPolynomial = 7;
+    SPI_Init(SPI1, &SPI_InitStructure);
+
+    SPI_Cmd(SPI1, ENABLE);
+}
+
+/*********************************************************************
+ * @fn      SPI1_DMA_Init
+ *
+ * @brief   Initialize DMA for SPI2
+ *
+ * @return  none
+ */
+static void SPI1_DMA_Init(void)
+{
+    DMA_InitTypeDef DMA_InitStructure = {0};
+
+    RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+
+    DMA_DeInit(SPI1_DMA_TX_CH);
+
+    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&SPI1->DATAR;
+    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)color_buf;
+    DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralDST;
+    DMA_InitStructure.DMA_BufferSize = COLOR_BUFFER_LEN;
+    DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+    DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
+    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
+    DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_Byte;
+    DMA_InitStructure.DMA_Mode = DMA_Mode_Normal;
+    DMA_InitStructure.DMA_Priority = DMA_Priority_High;
+    DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
+
+    DMA_Init(SPI1_DMA_TX_CH, &DMA_InitStructure);
+
+    SPI_I2S_DMACmd(SPI1, SPI_I2S_DMAReq_Tx, ENABLE);
+}
+
+/*********************************************************************
+ * @fn      w2812_sync
+ *
+ * @brief   Write data to LEDs
+ *
+ * @return  none
+ */
+static void w2812_sync(void)
+{
+    // copy from internal buffer to SPI buffer
+    for (int i = 0; i < LEDS_NUM; i++)
+    {
+        setPixelColor(i, state.data.leds[i].r, state.data.leds[i].g, state.data.leds[i].b);
+    }
+
+    // enable DMA to set the leds
+    while (DMA_GetCurrDataCounter(SPI1_DMA_TX_CH) != 0)
+    {
+        /* do nothing */
+    }
+    DMA_ClearFlag(DMA1_FLAG_TC3);
+    DMA_Cmd(SPI1_DMA_TX_CH, DISABLE);
+    DMA_SetCurrDataCounter(SPI1_DMA_TX_CH, COLOR_BUFFER_LEN);
+    DMA_Cmd(SPI1_DMA_TX_CH, ENABLE);
+}
+
+/* clear the various error flags that may block further communication */
+static void I2C1_ClearErrorFlags(void)
+{
+
+    /* I2C_FLAG_AF - Acknowledge failure flag */
+    if (I2C_GetFlagStatus(I2C1, I2C_FLAG_AF) != RESET)
+    {
+        PRINT("clear I2C_FLAG_AF flag\r\n");
+        I2C_ClearFlag(I2C1, I2C_FLAG_AF);
+    }
+    /* I2C_FLAG_BERR -Bus Error flag.*/
+    if (I2C_GetFlagStatus(I2C1, I2C_FLAG_BERR) != RESET)
+    {
+        PRINT("clear I2C_FLAG_BERR flag\r\n");
+        I2C_ClearFlag(I2C1, I2C_FLAG_BERR);
+    }
+}
+
+/* clear the stop flag */
+static void I2C1_ClearStopFlag(void)
+{
+    if (I2C_GetFlagStatus(I2C1, I2C_FLAG_STOPF) != RESET)
+    {
+        /* Stop detection flag (Slave mode).
+         * STOPF (STOP detection) is cleared by software sequence: a read operation
+         * to I2C_STAR1 register (I2C_GetFlagStatus()) followed by a write operation
+         * to I2C_CTLR1 register (I2C_Cmd() to re-enable the I2C peripheral).
+         * -> Since we just read the flag, we only need to (re-)enable.
+         * */
+        I2C_Cmd(I2C1, ENABLE);
+    }
+}
+
+/* function to process I2C slave data transfers */
+/* reference: arduino implementation */
+static void i2c_slave_process(void)
+{
+    /* Process incoming and outgoing I2C data.
+     * When processing the data we can assume there is an address match.
+     * We could wait for an address match, but that would be blocking
+     * and isn't needed as RX/TX-flags are only set when addressed properly.
+     */
+    /* Process receiving data */
+    if (I2C_GetFlagStatus(I2C1, I2C_FLAG_RXNE) != RESET)
+    {
+        /* Data register not empty (Receiver) flag
+         * read all available data and store it
+         */
+        state.raw_data_ptr = I2C_ReceiveData(I2C1);
+        PRINT("address %x\r\n", state.raw_data_ptr);
+        // TODO: use i2c_slave_read() here?
+        while (I2C_GetFlagStatus(I2C1, I2C_FLAG_RXNE) != RESET)
+        {
+            char c = I2C_ReceiveData(I2C1);
+            PRINT("received %x\r\n", c);
+            if (state.raw_data_ptr < RESULT_BUFFER_SIZE)
+            {
+                // TODO: only allow writing to the led data, or we don't care?
+                if (state.raw_data_ptr >= RESULT_RW_OFFSET)
+                {
+                    state.raw_data[state.raw_data_ptr++] = c;
+                    state.flag_update_leds = 1;
+                }
+                else
+                {
+                    PRINT("ERROR: trying to write 0x%x to readonly data: 0x%x\r\n", c, state.raw_data_ptr);
+                }
+            }
+            else
+            {
+                // TODO: do a reboot here and trigger bootloader?
+                PRINT("ERROR: trying to write 0x%x outside of result buffer: 0x%x\r\n", c, state.raw_data_ptr);
+            }
+        }
+    }
+
+    /* Process end of receiving data, as determined by stop flag */
+    if (I2C_CheckEvent(I2C1, I2C_EVENT_SLAVE_STOP_DETECTED))
+    {
+        PRINT("all data received\r\n");
+        /* clear the stop flag to be ready for another session */
+        I2C1_ClearStopFlag();
+    }
+
+    /* Process transmitting data */
+    if (I2C_GetFlagStatus(I2C1, I2C_FLAG_TXE) != RESET)
+    {
+        /* Data register empty flag (Transmitter).
+         * It seems we need to send something
+         */
+        if (state.raw_data_ptr < RESULT_BUFFER_SIZE)
+        {
+            PRINT("sending\r\n");
+            I2C_SendData(I2C1, state.raw_data[state.raw_data_ptr++]); // send register value to master
+        }
+        else
+        {
+            PRINT("ERROR: reading dummy data\r\n");
+            I2C_SendData(I2C1, 0x00); // send dummy data to master
+        }
+    }
+
+    // just for debugging
+    if (I2C_CheckEvent(I2C1, I2C_EVENT_SLAVE_BYTE_TRANSMITTED))
+    {
+        PRINT("Master acked received byte (I2C_EVENT_SLAVE_BYTE_TRANSMITTED)\r\n");
+    }
+
+    if (I2C_CheckEvent(I2C1, I2C_EVENT_SLAVE_ACK_FAILURE))
+    {
+        PRINT("Master stopped receiving (I2C_EVENT_SLAVE_ACK_FAILURE)\r\n");
+    }
+
+    /* Clear error flags (since we don't handle them anyways) */
+    I2C1_ClearErrorFlags();
+}
+
+/* initialize the I2C interface */
+static void IIC_Init(uint32_t bound, uint16_t address)
+{
+    GPIO_InitTypeDef GPIO_InitStructure = {0};
+    I2C_InitTypeDef I2C_InitStructure = {0};
+    NVIC_InitTypeDef NVIC_InitStruct = {0};
+
+    /* enable I2C1 and GPIOC clocks */
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
+
+    /* remap PC18/PC19 to I2C1 SDA/SCL */
+    GPIO_PinRemapConfig(GPIO_PartialRemap3_I2C1, ENABLE); // 011: Mapping (SCL/PC19, SDA/PC18)
+
+    /* Disable DIO (SWD) interface on these pins */
+    GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE);
+
+    /* configure the GPIO as SDA/SCL pins */
+    GPIO_InitStructure.GPIO_Pin = SDA_PIN | SCL_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP; // automatic open-drain
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+    /* configure I2C1 */
+    I2C_InitStructure.I2C_ClockSpeed = bound;                                 // bus speed
+    I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;                                // there is only 1 mode
+    I2C_InitStructure.I2C_DutyCycle = I2C_DutyCycle_16_9;                     // I2C fast mode Tlow/Thigh = 16/9
+    I2C_InitStructure.I2C_OwnAddress1 = address << 1;                         // 7 or 10 bit address
+    I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;                               // automatic acknowledge
+    I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit; // use 7 bit address
+    I2C_Init(I2C1, &I2C_InitStructure);
+
+    /* configure I2C interrupts */
+    NVIC_InitStruct.NVIC_IRQChannel = I2C1_EV_IRQn;
+    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;
+    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 1;
+    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStruct);
+
+    NVIC_InitStruct.NVIC_IRQChannel = I2C1_ER_IRQn;
+    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;
+    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 1;
+    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStruct);
+
+    /* enable I2C interrupts */
+    I2C_ITConfig(I2C1, I2C_IT_EVT | I2C_IT_ERR | I2C_IT_BUF, ENABLE); // TODO: also I2C_IT_BUF?
+
+    /* enable clock stretching */
+    I2C_StretchClockCmd(I2C1, ENABLE);
+
+    /* enable I2C1 */
+    I2C_Cmd(I2C1, ENABLE);
+}
+
+/* activate a single column of the button matrix (=set to low) */
+static void Matrix_Set_Col(uint8_t col)
+{
+    switch (col)
+    {
+        case 0:
+            GPIO_WriteBit(COL7_PORT, COL7_PIN, Bit_SET);
+            GPIO_WriteBit(COL0_PORT, COL0_PIN, Bit_RESET);
+            break;
+        case 1:
+            GPIO_WriteBit(COL0_PORT, COL0_PIN, Bit_SET);
+            GPIO_WriteBit(COL1_PORT, COL1_PIN, Bit_RESET);
+            break;
+        case 2:
+            GPIO_WriteBit(COL1_PORT, COL1_PIN, Bit_SET);
+            GPIO_WriteBit(COL2_PORT, COL2_PIN, Bit_RESET);
+            break;
+        case 3:
+            GPIO_WriteBit(COL2_PORT, COL2_PIN, Bit_SET);
+            GPIO_WriteBit(COL3_PORT, COL3_PIN, Bit_RESET);
+            break;
+        case 4:
+            GPIO_WriteBit(COL3_PORT, COL3_PIN, Bit_SET);
+            GPIO_WriteBit(COL4_PORT, COL4_PIN, Bit_RESET);
+            break;
+        case 5:
+            GPIO_WriteBit(COL4_PORT, COL4_PIN, Bit_SET);
+            GPIO_WriteBit(COL5_PORT, COL5_PIN, Bit_RESET);
+            break;
+        case 6:
+            GPIO_WriteBit(COL5_PORT, COL5_PIN, Bit_SET);
+            GPIO_WriteBit(COL6_PORT, COL6_PIN, Bit_RESET);
+            break;
+        case 7:
+            GPIO_WriteBit(COL6_PORT, COL6_PIN, Bit_SET);
+            GPIO_WriteBit(COL7_PORT, COL7_PIN, Bit_RESET);
+            break;
+        default:
+            GPIO_WriteBit(GPIOC, COL0_PIN | COL1_PIN, Bit_SET);
+            GPIO_WriteBit(GPIOA, COL2_PIN | COL3_PIN | COL4_PIN | COL5_PIN | COL6_PIN | COL7_PIN, Bit_SET);
+    }
+}
+
+/*********************************************************************
+ * @fn      Matrix_Scan
+ *
+ * @brief   Perform button matrix scan.
+ *
+ * @return  none
+ */
+static void Matrix_Scan(void)
+{
+    static uint8_t scan_cnt = 0;
+    static uint8_t scan_col = 0;
+    static uint8_t scan_result[N_COLS] = {0x00};
+    static uint8_t scan = 0;
+
+    scan_cnt++;
+    if ((scan_cnt % 10) == 0)
+    {
+        /* reset the debounce counter */
+        scan_cnt = 0;
+
+        /* Determine whether the two scan results are consistent (debouncing) */
+        if (scan == ((GPIO_ReadInputData(GPIOB) >> 5) & 0xff))
+        {
+            /* now set the result for this column scan */
+            scan_result[scan_col] = ~scan;
+        }
+        else
+        {
+            /* TODO: in this case we should keep the previous state */
+        }
+
+        /* activate the next column */
+        scan_col = (scan_col + 1) % N_COLS;
+        Matrix_Set_Col(scan_col);
+
+        /* all columns were scanned
+         * write the result and notify if it is changed
+         */
+        if (scan_col == 0)
+        {
+            memcpy(state.data.matrix_state, scan_result, N_COLS);
+            state.flag_matrix_scan_done = 1; // indicate that a full scan was finished
+            memset(scan_result, 0, N_COLS);
+        }
+    }
+    else if ((scan_cnt % 5) == 0)
+    {
+        /* Save the first scan result */
+        scan = (GPIO_ReadInputData(GPIOB) >> 5) & 0xff;
+    }
+}
+
+/*********************************************************************
+ * @fn      Matrix_Init
+ *
+ * @brief   Initialize matrix gpio and timer3 for button matrix scan
+ *
+ * @param   arr - The specific period value
+ *          psc - The specifies prescaler value
+ *
+ * @return  none
+ */
+static void Matrix_Init(uint16_t arr, uint16_t psc)
+{
+
+    GPIO_InitTypeDef GPIO_InitStructure = {0};
+    TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure = {0};
+    NVIC_InitTypeDef NVIC_InitStructure = {0};
+
+    /* Enable GPIOB clock */
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO | RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC, ENABLE);
+
+    /* Enable Timer3 Clock */
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
+
+    /* the columns are the outputs */
+    GPIO_InitStructure.GPIO_Pin = COL0_PIN | COL1_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOC, &GPIO_InitStructure);
+
+    GPIO_InitStructure.GPIO_Pin = COL2_PIN | COL3_PIN | COL4_PIN | COL5_PIN | COL6_PIN | COL7_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+    /* the rows are the inputs */
+    GPIO_InitStructure.GPIO_Pin = ROW0_PIN | ROW1_PIN | ROW2_PIN | ROW3_PIN | ROW4_PIN | ROW5_PIN | ROW6_PIN | ROW7_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+    /* Initialize Timer3 */
+    TIM_TimeBaseStructure.TIM_Period = arr;
+    TIM_TimeBaseStructure.TIM_Prescaler = psc;
+    TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;
+    TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
+    TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStructure);
+
+    /* enable timer interrupts */
+    TIM_ITConfig(TIM3, TIM_IT_Update, ENABLE);
+
+    /* configure timer interrupt */
+    NVIC_InitStructure.NVIC_IRQChannel = TIM3_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 2;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+
+    /* deactivate all columns */
+    Matrix_Set_Col(99);
+
+    /* activate the first column */
+    Matrix_Set_Col(0);
+
+    /* Enable Timer3 */
+    TIM_Cmd(TIM3, ENABLE);
+}
+
+/* set all leds to the same color */
+static void setColor(uint8_t r, uint8_t g, uint8_t b)
+{
+    for (int i = 0; i < LEDS_NUM; i++)
+    {
+        state.data.leds[i].r = r;
+        state.data.leds[i].g = g;
+        state.data.leds[i].b = b;
+    }
+}
+
+/* execute a led animation */
+static void led_boot_sequence()
+{
+    setColor(255, 0, 0);
+    w2812_sync();
+    Delay_Ms(500);
+    setColor(0, 255, 0);
+    w2812_sync();
+    Delay_Ms(500);
+    setColor(0, 0, 255);
+    w2812_sync();
+    Delay_Ms(500);
+}
+
+/* send a USB packet */
+static void USBSendPacket(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
+{
+    uint8_t packet[4];
+    packet[0] = (cin & 0x0F); // Cable 0
+    packet[1] = b1;
+    packet[2] = b2;
+    packet[3] = b3;
+    USB_write(packet, 4);
+#ifndef DEBUG
+    for (int i = 0; i < 4; i++)
+    {
+        while (USART_GetFlagStatus(USART3, USART_FLAG_TC) == RESET)
+        {
+            /* do nothing */
+        }
+        USART_SendData(USART3, packet[i]);
+    }
+#endif
+}
+
+/* The value of the CC is equal to 64 (0x40)plus/minus the number of steps, for
+ * example for 10 steps back the value would be 54 (0x36). */
+static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value)
+{
+    USBSendPacket(0x0B, 0xB0 | (channel & 0x0F), control, value);
+}
+
+static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
+{
+    uint8_t channel = b1 & 0x0F;
+
+    switch (cin)
+    {
+        case 0x08: // Note Off
+            PRINT("note off: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
+            break;
+
+        case 0x09: // Note On
+            if (b3 > 0)
+            {
+                PRINT("note on: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
+            }
+            else if (b3 == 0)
+            {
+                PRINT("note off: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
+            }
+            break;
+
+        case 0x0A: // Poly Key Pressure
+            PRINT("Poly key pressure: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
+            break;
+
+        case 0x0B: // Control Change
+            // TODO: use this to change the leds?
+            if (b2 < BASE_NOTE_LEDS)
+            {
+                // invalid led index
+                break;
+            }
+
+            if ((b2 - BASE_NOTE_LEDS) >= LEDS_NUM)
+            {
+                // invalid led index
+                break;
+            }
+
+            if (b3 == 0)
+            {
+                state.data.leds[b2 - BASE_NOTE_LEDS].r = 0;
+                state.data.leds[b2 - BASE_NOTE_LEDS].g = 0;
+                state.data.leds[b2 - BASE_NOTE_LEDS].b = 0;
+            }
+            else if (b3 < 10)
+            {
+                state.data.leds[b2 - BASE_NOTE_LEDS] = mixxx_palette[b3 - 1];
+            }
+            state.flag_update_leds = 1;
+            break;
+
+        case 0x0C: // Program Change
+            PRINT("Program change: channel %d, b2 0x%x\r\n", channel, b2);
+            break;
+
+        case 0x0D: // Channel Pressure (Aftertouch)
+            PRINT("Channel Pressure (Aftertouch): channel %d, b2 0x%x\r\n", channel, b2);
+            break;
+
+        case 0x0E: // Pitch Bend
+            // Reconstruct 14-bit value from LSB (b2) and MSB (b3)
+            int val = (b2 & 0x7F) | ((b3 & 0x7F) << 7);
+            val -= 8192; // Center at 0
+            PRINT("Pitch bend: channel %d, val %d\r\n", channel, val);
+            break;
+
+        case 0x0F: // Single Byte (Real Time)
+            PRINT("single byte: 0x%02x\r\n", b1);
+            break;
+
+        // 0x05 could be SysEx end OR standard 1-byte System Common (Tune Request
+        // 0xF6)
+        case 0x05:
+            if (b1 >= 0xF8)
+            { // If it's real time embedded here (rare but legal)
+                PRINT("SysEx?: 0x%02x\r\n", b1);
+            }
+            break;
+
+        default:
+            // SysEx (0x04, 0x06, 0x07) and others ignored
+            break;
+    }
+}
+
+/* main */
+int main(void)
+{
+    uint8_t midi_pkt[4];
+    uint8_t previous_kb_result[N_COLS] = {0};
+    uint8_t current_kb_result[N_COLS] = {0};
+
+    /* set all data and flags to 0 */
+    memset(&state, 0, sizeof(addon_state_t));
+
+    /* set the version number from git */
+    char version_major[] = VERSION_MAJOR;
+    char version_minor[] = VERSION_MINOR;
+    char version_patch[] = VERSION_PATCH;
+    state.data.version[0] = atoi(version_major) & 0xff;
+    state.data.version[1] = atoi(version_minor) & 0xff;
+    state.data.version[2] = atoi(version_patch) & 0xff;
+
+    SystemInit();
+#ifdef NVIC_PriorityGroup_2
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
+#else
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_1);
+#endif
+    SystemCoreClockUpdate();
+    Delay_Init();
+
+    /* configure UART3 as serial monitor */
+    USART3_Output_Init(UART_BAUDRATE);
+
+    /* makes sure that we can still flash using SWD */
+    Delay_Ms(1000); // give serial monitor time to open
+
+    /* initialize i2c */
+    IIC_Init(I2C_SPEED, I2C_ADDRESS); // disables SWD
+
+    PRINT("SystemClk: %u\r\n", (unsigned)SystemCoreClock);
+    PRINT("ChipID: %08x\r\n", (unsigned)DBGMCU_GetCHIPID());
+
+    /* Initialize timer for Keyboard and mouse scan timing */
+    Matrix_Init(1, TIMER_FREQ); // every 10 ms
+
+    /* configure SPI1 for WS2812 */
+    SPI_1Lines_HalfDuplex_Init();
+    SPI1_DMA_Init();
+    DMA_Cmd(SPI1_DMA_TX_CH, ENABLE);
+
+    /* initialize USB MIDI */
+    USB_init();
+
+    PRINT("BloopPad Maxx Init done\r\n");
+
+    // LED boot sequence
+    led_boot_sequence();
+
+    // clear all leds
+    setColor(0, 0, 0);
+    w2812_sync();
+
+    while (1)
+    {
+        if (state.flag_matrix_scan_done)
+        {
+            /* take a local copy of the current button state */
+            state.flag_matrix_scan_done = 0;
+            memcpy(current_kb_result, state.data.matrix_state, N_COLS);
+        }
+
+        if (USB_available())
+        {
+            if (USB_read(midi_pkt, 4) == 4)
+            {
+                handle_midi(midi_pkt[0] & 0x0F, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
+            }
+        }
+
+        /* uart receive midi CC message */
+        if (USART_GetFlagStatus(USART3, USART_FLAG_RXNE) != RESET)
+        {
+            midi_pkt[0] = USART_ReceiveData(USART3);
+            for (int i = 1; i < 4; i++)
+            {
+                while (USART_GetFlagStatus(USART3, USART_FLAG_RXNE) == RESET)
+                {
+                    /* waiting for receiving finish */
+                }
+                midi_pkt[i] = USART_ReceiveData(USART3);
+            }
+            handle_midi(midi_pkt[0] & 0x0F, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
+        }
+
+        if (memcmp(previous_kb_result, current_kb_result, N_COLS) != 0)
+        {
+            for (int c = 0; c < N_COLS; c++)
+            {
+                for (int r = 0; r < N_ROWS; r++)
+                {
+                    uint8_t current_button_state = (current_kb_result[c] & (1 << r)) & 0xff;
+                    uint8_t previous_button_state = (previous_kb_result[c] & (1 << r)) & 0xff;
+
+                    if (current_button_state != previous_button_state)
+                    {
+                        USBSendControlChange(MIDI_CHANNEL, button_note[c][r], current_button_state ? MIDI_MAX : 0);
+                    }
+                }
+            }
+            /* update the previous button state */
+            memcpy(previous_kb_result, current_kb_result, N_COLS);
+        }
+
+        if (state.flag_update_leds)
+        {
+            state.flag_update_leds = 0;
+            // set the current led state to the leds
+            w2812_sync();
+        }
+    }
+}
+
+/* interrupt handlers */
+void TIM3_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
+void TIM3_IRQHandler(void)
+{
+    if (TIM_GetITStatus(TIM3, TIM_IT_Update) != RESET)
+    {
+        Matrix_Scan();
+    }
+    TIM_ClearITPendingBit(TIM3, TIM_IT_Update);
+}
+
+void NMI_Handler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
+void NMI_Handler(void)
+{
+    PRINT("NMI_Handler\r\n");
+}
+
+void HardFault_Handler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
+void HardFault_Handler(void)
+{
+    PRINT("HARDFAULT\r\n");
+    while (1)
+    {
+    }
+}
+
+void I2C1_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
+void I2C1_IRQHandler(void)
+{
+    PRINT("I2C1_IRQHandler\r\n");
+}
+
+void I2C1_EV_IRQHandler(void) __attribute__((interrupt));
+void I2C1_EV_IRQHandler(void)
+{
+    i2c_slave_process();
+}
+
+void I2C1_ER_IRQHandler(void) __attribute__((interrupt));
+void I2C1_ER_IRQHandler(void)
+{
+}
