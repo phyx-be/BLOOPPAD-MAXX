@@ -7,6 +7,9 @@
 /* we use our own custom debug lib */
 #include "debug.h"
 
+/* copied from OpenWCH USB-PD example */
+#include "PD_Process.h"
+
 /* digital inputs: button matrix rows */
 #define ROW0_PORT GPIOB /* PB12: Row 0 */
 #define ROW0_PIN  GPIO_Pin_12
@@ -45,7 +48,8 @@
 #define COL7_PIN  GPIO_Pin_5
 #define N_COLS    (8)
 
-#define TIMER_FREQ ((SystemCoreClock / 10000) - 1) /* the output frequency of all timers: 100Hz */
+#define TIMER_FREQ_10KHZ ((SystemCoreClock / 10000) - 1) /* the output frequency of all timers: 100Hz */
+#define TIMER_FREQ_1MHZ ((SystemCoreClock / 1000000) - 1)
 
 /* SPI1 for WS2812 LEDs */
 #define LED_PORT         GPIOA /* PA7: WS2812 leds (SPI1 MOSI) */
@@ -127,6 +131,7 @@ typedef struct
     uint8_t reserved : 5;               /* reserved for future use */
     uint8_t slave_offset;               /* register offset captured after the most recent ADDR+W. */
     uint8_t slave_position;             /* current read/write cursor, reset to offset on every ADDR (including repeated-START), so write-then-read works without special-casing. */
+    uint8_t tim_ms_cnt;                 /* ms counter for TIM1 */
     union
     {
         addon_data_t data;
@@ -135,7 +140,7 @@ typedef struct
 } addon_state_t;
 
 /* Global Variables */
-static addon_state_t state;
+static addon_state_t state; /* current state */
 
 /* buffer to hold the SPI data for WS2812 */
 static uint8_t color_buf[COLOR_BUFFER_LEN] = {0};
@@ -660,6 +665,9 @@ static void led_boot_sequence()
     setColor(0, 0, 255);
     w2812_sync();
     Delay_Ms(500);
+    setColor(255, 255, 255);
+    w2812_sync();
+    Delay_Ms(500);
 }
 
 /* send a USB packet */
@@ -783,9 +791,38 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
     }
 }
 
+static void TIM1_Init(u16 arr, u16 psc)
+{
+    TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure = {0};
+    NVIC_InitTypeDef NVIC_InitStructure = {0};
+
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM1, ENABLE);
+
+    TIM_TimeBaseStructure.TIM_Period = arr;
+    TIM_TimeBaseStructure.TIM_Prescaler = psc;
+    TIM_TimeBaseStructure.TIM_ClockDivision = TIM_CKD_DIV1;
+    TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
+    TIM_TimeBaseStructure.TIM_RepetitionCounter = 0x00;
+    TIM_TimeBaseInit(TIM1, &TIM_TimeBaseStructure);
+
+    TIM_ClearITPendingBit(TIM1, TIM_IT_Update);
+    NVIC_InitStructure.NVIC_IRQChannel = TIM1_UP_IRQn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = 3;
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+
+    NVIC_Init(&NVIC_InitStructure);
+    TIM_ITConfig(TIM1, TIM_IT_Update, ENABLE);
+    TIM_Cmd(TIM1, ENABLE);
+}
+
 /* main */
 int main(void)
 {
+    /* initialize USB-PD sink 5V3A */
+    PD_Init();
+
+    CC_STATUS PD_State_Last;
     uint8_t midi_pkt[4];
     uint8_t uart_midi_pkt[4];
     uint8_t uart_midi_pkt_count = 0;
@@ -817,6 +854,9 @@ int main(void)
     /* configure UART3 as serial monitor */
     USART3_Output_Init(UART_BAUDRATE);
 
+    /* initialize USB-PD sink 5V3A */
+    PD_Init();
+
     /* makes sure that we can still flash using SWD */
     Delay_Ms(1000); /* give serial monitor time to open */
 
@@ -827,12 +867,15 @@ int main(void)
     PRINT("ChipID: %08x\r\n", (unsigned)DBGMCU_GetCHIPID());
 
     /* Initialize timer for Keyboard and mouse scan timing */
-    Matrix_Init(1, TIMER_FREQ); /* every 10 ms */
+    Matrix_Init(1, TIMER_FREQ_1KHZ); /* every 10 ms */
 
     /* configure SPI1 for WS2812 */
     SPI_1Lines_HalfDuplex_Init();
     SPI1_DMA_Init();
     DMA_Cmd(SPI1_DMA_TX_CH, ENABLE);
+
+    /* initialize a timer for USB-PD detection */
+    TIM1_Init(999, TIMER_FREQ_1MHZ); // every 1 ms
 
     /* initialize USB MIDI */
     USB_init();
@@ -848,6 +891,30 @@ int main(void)
 
     while (1)
     {
+        /* Get the calculated timing interval value */
+        TIM_ITConfig(TIM1, TIM_IT_Update, DISABLE);
+        Tmr_Ms_Dlt = state.tim_ms_cnt - Tmr_Ms_Cnt_Last;
+        Tmr_Ms_Cnt_Last = state.tim_ms_cnt;
+        TIM_ITConfig(TIM1, TIM_IT_Update, ENABLE);
+        PD_Ctl.Det_Timer += Tmr_Ms_Dlt;
+        if (PD_Ctl.Det_Timer > 4)
+        {
+            PD_Ctl.Det_Timer = 0;
+            PD_Det_Proc();
+        }
+        PD_Main_Proc();
+
+        if (PD_Ctl.PD_State != PD_State_Last) {
+            PRINT("USB-PD state: %u\r\n", PD_Ctl.PD_State);
+            PD_State_Last = PD_Ctl.PD_State;
+        }
+
+        if (PD_Ctl.PD_State == STA_RX_PS_RDY) {
+            /* LED boot sequence */
+            PRINT("USB-PD negotiation done\r\n");
+            led_boot_sequence(); // Draws a lot of power
+        }
+
         if (state.flag_matrix_scan_done)
         {
             /* take a local copy of the current button state */
@@ -903,6 +970,16 @@ int main(void)
 }
 
 /* interrupt handlers */
+void TIM1_UP_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
+void TIM1_UP_IRQHandler(void)
+{
+    if (TIM_GetITStatus(TIM1, TIM_IT_Update) != RESET)
+    {
+        state.tim_ms_cnt++;
+    }
+    TIM_ClearITPendingBit(TIM1, TIM_IT_Update);
+}
+
 void TIM3_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 void TIM3_IRQHandler(void)
 {
