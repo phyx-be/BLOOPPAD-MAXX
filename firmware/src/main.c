@@ -797,11 +797,15 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 int main(void)
 {
     uint8_t midi_pkt[4];
+    uint8_t uart_midi_pkt[4];
+    uint8_t uart_midi_pkt_count = 0;
     uint8_t previous_kb_result[N_COLS] = {0};
     uint8_t current_kb_result[N_COLS] = {0};
 
     /* set all data and flags to 0 */
     memset(&state, 0, sizeof(addon_state_t));
+    memset(midi_pkt, 0, 4);
+    memset(uart_midi_pkt, 0, 4);
 
     /* set the version number from git */
     char version_major[] = VERSION_MAJOR;
@@ -870,18 +874,14 @@ int main(void)
         }
 
         /* uart receive midi CC message */
-        if (USART_GetFlagStatus(USART3, USART_FLAG_RXNE) != RESET)
+        while (USART_GetFlagStatus(USART3, USART_FLAG_RXNE) != RESET)
         {
-            midi_pkt[0] = USART_ReceiveData(USART3);
-            for (int i = 1; i < 4; i++)
+            uart_midi_pkt[uart_midi_pkt_count++] = USART_ReceiveData(USART3);
+            if (uart_midi_pkt_count == 4)
             {
-                while (USART_GetFlagStatus(USART3, USART_FLAG_RXNE) == RESET)
-                {
-                    /* waiting for receiving finish */
-                }
-                midi_pkt[i] = USART_ReceiveData(USART3);
+                uart_midi_pkt_count = 0;
+                handle_midi(uart_midi_pkt[0] & 0x0F, uart_midi_pkt[1], uart_midi_pkt[2], uart_midi_pkt[3]);
             }
-            handle_midi(midi_pkt[0] & 0x0F, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
         }
 
         if (memcmp(previous_kb_result, current_kb_result, N_COLS) != 0)
