@@ -1,0 +1,219 @@
+Altium Designer Pick and Place Locations
+C:\Users\wim.vangool\SynologyDrive\Drive\Electronics\BloopPadMaxx_00\OUTPUT\Pick Place\Pick Place for BloopPadMaxx_00.txt
+
+========================================================================================================================
+File Design Information:
+
+Date:       24/02/26
+Time:       15:12
+Revision:   Not in VersionControl
+Variant:    No variations
+Units used: mil
+
+Designator Comment                                                                  Layer    Footprint              Center-X(mil) Center-Y(mil) Rotation Description         
+P2         "Header 2"                                                               TopLayer HDR1X2                 2257.480      7625.984      180      ""                  
+P1         "Header 2"                                                               TopLayer HDR1X2                 3057.480      7625.984      180      ""                  
+CZ4        "Campzone 2020 4x4 silicone keypad"                                      TopLayer CZ20_4x4               4625.984      1476.378      0        ""                  
+CZ3        "Campzone 2020 4x4 silicone keypad"                                      TopLayer CZ20_4x4               4625.984      5413.386      0        ""                  
+CZ2        "Campzone 2020 4x4 silicone keypad"                                      TopLayer CZ20_4x4               688.976       1476.378      0        ""                  
+CZ1        "Campzone 2020 4x4 silicone keypad"                                      TopLayer CZ20_4x4               688.976       5413.386      0        ""                  
+SW1        "LP SMD tact sw 3x2.5mm"                                                 TopLayer OMR_B3U-1000P          2980.315      7472.441      90       ""                  
+U1         "WCH CH32X035G8U6 QFN28 RISC-V 32-bit MCU, 62KB Flash, 10KB RAM, USB PD" TopLayer QFN_28_4.0x4.0_P0.4    3366.142      7519.685      90       ""                  
+R3         ""                                                                       TopLayer R0603_N                2370.082      7456.690      270      ""                  
+R2         ""                                                                       TopLayer R0603_N                2311.020      7456.696      90       ""                  
+R1         ""                                                                       TopLayer R0603_N                3070.869      7452.753      270      ""                  
+J1         "USB 2.0 C Reversible Receptacle Horizontal full SMD"                    TopLayer XUNPU-TYPEC-304S-ACP16 2657.480      7535.433      180      ""                  
+D128       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       6102.362      0.000         0        =Description        
+D127       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       6102.362      984.252       0        =Description        
+D126       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       6102.362      1968.504      0        =Description        
+D125       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       6102.362      2952.756      0        =Description        
+D124       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       6102.362      3937.008      0        =Description        
+D123       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       6102.362      4921.260      0        =Description        
+D122       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       6102.362      5905.512      0        =Description        
+D121       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       6102.362      6889.764      0        =Description        
+D120       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       5118.110      0.000         0        =Description        
+D119       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       5118.110      984.252       0        =Description        
+D118       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       5118.110      1968.504      0        =Description        
+D117       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       5118.110      2952.756      0        =Description        
+D116       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       5118.110      3937.008      0        =Description        
+D115       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       5118.110      4921.260      0        =Description        
+D114       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       5118.110      5905.512      0        =Description        
+D113       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       5118.110      6889.764      0        =Description        
+D112       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       4133.858      0.000         0        =Description        
+D111       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       4133.858      984.252       0        =Description        
+D110       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       4133.858      1968.504      0        =Description        
+D109       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       4133.858      2952.756      0        =Description        
+D108       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       4133.858      3937.008      0        =Description        
+D107       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       4133.858      4921.260      0        =Description        
+D106       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       4133.858      5905.512      0        =Description        
+D105       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       4133.858      6889.764      0        =Description        
+D104       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       3149.606      0.000         0        =Description        
+D103       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       3149.606      984.252       0        =Description        
+D102       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       3149.606      1968.504      0        =Description        
+D101       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       3149.606      2952.756      0        =Description        
+D100       "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       3149.606      3937.008      0        =Description        
+D99        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       3149.606      4921.260      0        =Description        
+D98        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       3149.606      5905.512      0        =Description        
+D97        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       3149.606      6889.764      0        =Description        
+D96        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       2165.354      0.000         0        =Description        
+D95        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       2165.354      984.252       0        =Description        
+D94        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       2165.354      1968.504      0        =Description        
+D93        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       2165.354      2952.756      0        =Description        
+D92        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       2165.354      3937.008      0        =Description        
+D91        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       2165.354      4921.260      0        =Description        
+D90        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       2165.354      5905.512      0        =Description        
+D89        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       2165.354      6889.764      0        =Description        
+D88        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       1181.102      0.000         0        =Description        
+D87        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       1181.102      984.252       0        =Description        
+D86        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       1181.102      1968.504      0        =Description        
+D85        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       1181.102      2952.756      0        =Description        
+D84        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       1181.102      3937.008      0        =Description        
+D83        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       1181.102      4921.260      0        =Description        
+D82        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       1181.102      5905.512      0        =Description        
+D81        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       1181.102      6889.764      0        =Description        
+D80        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       196.850       0.000         0        =Description        
+D79        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       196.850       984.252       0        =Description        
+D78        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       196.850       1968.504      0        =Description        
+D77        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       196.850       2952.756      0        =Description        
+D76        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       196.850       3937.008      0        =Description        
+D75        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       196.850       4921.260      0        =Description        
+D74        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       196.850       5905.512      0        =Description        
+D73        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       196.850       6889.764      0        =Description        
+D72        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       -787.402      0.000         0        =Description        
+D71        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       -787.402      984.252       0        =Description        
+D70        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       -787.402      1968.504      0        =Description        
+D69        "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       -787.402      2952.756      0        =Description        
+D68        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             3149.606      90.551        0        "Default Diode"     
+D67        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             3149.606      4027.559      0        "Default Diode"     
+D66        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             -787.402      90.551        0        "Default Diode"     
+D65        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             -787.402      4027.559      0        "Default Diode"     
+D64        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             4133.858      90.551        0        "Default Diode"     
+D63        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             4133.858      4027.559      0        "Default Diode"     
+D62        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             196.850       90.551        0        "Default Diode"     
+D61        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             196.850       4027.559      0        "Default Diode"     
+D60        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             5118.110      90.551        0        "Default Diode"     
+D59        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             5118.110      4027.559      0        "Default Diode"     
+D58        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             1181.102      90.551        0        "Default Diode"     
+D57        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             1181.102      4027.559      0        "Default Diode"     
+D56        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             6102.362      90.551        0        "Default Diode"     
+D55        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             6102.362      4027.559      0        "Default Diode"     
+D54        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             2165.354      90.551        0        "Default Diode"     
+D53        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             2165.354      4027.559      0        "Default Diode"     
+D52        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             3149.606      1074.803      0        "Default Diode"     
+D51        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             3149.606      5011.811      0        "Default Diode"     
+D50        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             -787.402      1074.803      0        "Default Diode"     
+D49        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             -787.402      5011.811      0        "Default Diode"     
+D48        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             4133.858      1074.803      0        "Default Diode"     
+D47        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             4133.858      5011.811      0        "Default Diode"     
+D46        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             196.850       1074.803      0        "Default Diode"     
+D45        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             196.850       5011.811      0        "Default Diode"     
+D44        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             5118.110      1074.803      0        "Default Diode"     
+D43        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             5118.110      5011.811      0        "Default Diode"     
+D42        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             1181.102      1074.803      0        "Default Diode"     
+D41        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             1181.102      5011.811      0        "Default Diode"     
+D40        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             6102.362      1074.803      0        "Default Diode"     
+D39        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             6102.362      5011.811      0        "Default Diode"     
+D38        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             2165.354      1074.803      0        "Default Diode"     
+D37        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             2165.354      5011.811      0        "Default Diode"     
+D36        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             3149.606      2059.055      0        "Default Diode"     
+D35        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             3149.606      5996.063      0        "Default Diode"     
+D34        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             -787.402      2059.055      0        "Default Diode"     
+D33        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             -787.402      5996.063      0        "Default Diode"     
+D32        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             4133.858      2059.055      0        "Default Diode"     
+D31        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             4133.858      5996.063      0        "Default Diode"     
+D30        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             196.850       2059.055      0        "Default Diode"     
+D29        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             196.850       5996.063      0        "Default Diode"     
+D28        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             5118.110      2059.055      0        "Default Diode"     
+D27        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             5118.110      5996.063      0        "Default Diode"     
+D26        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             1181.102      2059.055      0        "Default Diode"     
+D25        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             1181.102      5996.063      0        "Default Diode"     
+D24        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             6102.362      2059.055      0        "Default Diode"     
+D23        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             6102.362      5996.063      0        "Default Diode"     
+D22        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             2165.354      2059.055      0        "Default Diode"     
+D21        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             2165.354      5996.063      0        "Default Diode"     
+D20        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             3149.606      3043.307      0        "Default Diode"     
+D19        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             3149.606      6980.315      0        "Default Diode"     
+D18        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             -787.402      3043.307      0        "Default Diode"     
+D17        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             -787.402      6980.315      0        "Default Diode"     
+D16        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             4133.858      3043.307      0        "Default Diode"     
+D15        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             4133.858      6980.315      0        "Default Diode"     
+D14        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             196.850       3043.307      0        "Default Diode"     
+D13        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             196.850       6980.315      0        "Default Diode"     
+D12        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             5118.110      3043.307      0        "Default Diode"     
+D11        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             5118.110      6980.315      0        "Default Diode"     
+D10        "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             1181.102      3043.307      0        "Default Diode"     
+D9         "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             1181.102      6980.315      0        "Default Diode"     
+D8         "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             6102.362      3043.307      0        "Default Diode"     
+D7         "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             6102.362      6980.315      0        "Default Diode"     
+D6         "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             2165.354      3043.307      0        "Default Diode"     
+D5         "1N4148W 75V 200mA 1.25Vf@150mA"                                         TopLayer SOD-323_AC             2165.354      6980.315      0        "Default Diode"     
+C66        CAP_CERAMIC                                                              TopLayer C0603_N                6102.359      -82.680       0        "Capacitor Ceramic" 
+C65        CAP_CERAMIC                                                              TopLayer C0603_N                5118.107      -82.680       0        "Capacitor Ceramic" 
+C64        CAP_CERAMIC                                                              TopLayer C0603_N                4133.855      -82.680       0        "Capacitor Ceramic" 
+C63        CAP_CERAMIC                                                              TopLayer C0603_N                3149.603      -82.680       0        "Capacitor Ceramic" 
+C62        CAP_CERAMIC                                                              TopLayer C0603_N                2165.351      -82.680       0        "Capacitor Ceramic" 
+C61        CAP_CERAMIC                                                              TopLayer C0603_N                1181.099      -82.680       0        "Capacitor Ceramic" 
+C60        CAP_CERAMIC                                                              TopLayer C0603_N                196.847       -82.680       0        "Capacitor Ceramic" 
+C59        CAP_CERAMIC                                                              TopLayer C0603_N                -787.405      -82.680       0        "Capacitor Ceramic" 
+C58        CAP_CERAMIC                                                              TopLayer C0603_N                6102.359      901.572       0        "Capacitor Ceramic" 
+C57        CAP_CERAMIC                                                              TopLayer C0603_N                5118.107      901.572       0        "Capacitor Ceramic" 
+C56        CAP_CERAMIC                                                              TopLayer C0603_N                4133.855      901.572       0        "Capacitor Ceramic" 
+C55        CAP_CERAMIC                                                              TopLayer C0603_N                3149.603      901.572       0        "Capacitor Ceramic" 
+C54        CAP_CERAMIC                                                              TopLayer C0603_N                2165.351      901.572       0        "Capacitor Ceramic" 
+C53        CAP_CERAMIC                                                              TopLayer C0603_N                1181.099      901.572       0        "Capacitor Ceramic" 
+C52        CAP_CERAMIC                                                              TopLayer C0603_N                196.847       901.572       0        "Capacitor Ceramic" 
+C51        CAP_CERAMIC                                                              TopLayer C0603_N                -787.405      901.572       0        "Capacitor Ceramic" 
+C50        CAP_CERAMIC                                                              TopLayer C0603_N                6102.359      1885.824      0        "Capacitor Ceramic" 
+C49        CAP_CERAMIC                                                              TopLayer C0603_N                5118.107      1885.824      0        "Capacitor Ceramic" 
+C48        CAP_CERAMIC                                                              TopLayer C0603_N                4133.855      1885.824      0        "Capacitor Ceramic" 
+C47        CAP_CERAMIC                                                              TopLayer C0603_N                3149.603      1885.824      0        "Capacitor Ceramic" 
+C46        CAP_CERAMIC                                                              TopLayer C0603_N                2165.351      1885.824      0        "Capacitor Ceramic" 
+C45        CAP_CERAMIC                                                              TopLayer C0603_N                1181.099      1885.824      0        "Capacitor Ceramic" 
+C44        CAP_CERAMIC                                                              TopLayer C0603_N                196.847       1885.824      0        "Capacitor Ceramic" 
+C43        CAP_CERAMIC                                                              TopLayer C0603_N                -787.405      1885.824      0        "Capacitor Ceramic" 
+C42        CAP_CERAMIC                                                              TopLayer C0603_N                6102.359      2870.075      0        "Capacitor Ceramic" 
+C41        CAP_CERAMIC                                                              TopLayer C0603_N                5118.107      2870.075      0        "Capacitor Ceramic" 
+C40        CAP_CERAMIC                                                              TopLayer C0603_N                4133.855      2870.075      0        "Capacitor Ceramic" 
+C39        CAP_CERAMIC                                                              TopLayer C0603_N                3149.603      2870.075      0        "Capacitor Ceramic" 
+C38        CAP_CERAMIC                                                              TopLayer C0603_N                2165.351      2870.075      0        "Capacitor Ceramic" 
+C37        CAP_CERAMIC                                                              TopLayer C0603_N                1181.099      2870.075      0        "Capacitor Ceramic" 
+C36        CAP_CERAMIC                                                              TopLayer C0603_N                196.847       2870.075      0        "Capacitor Ceramic" 
+C35        CAP_CERAMIC                                                              TopLayer C0603_N                -787.405      2870.075      0        "Capacitor Ceramic" 
+C34        CAP_CERAMIC                                                              TopLayer C0603_N                6102.359      3854.327      0        "Capacitor Ceramic" 
+C33        CAP_CERAMIC                                                              TopLayer C0603_N                5118.107      3854.327      0        "Capacitor Ceramic" 
+C32        CAP_CERAMIC                                                              TopLayer C0603_N                4133.855      3854.327      0        "Capacitor Ceramic" 
+C31        CAP_CERAMIC                                                              TopLayer C0603_N                3149.603      3854.327      0        "Capacitor Ceramic" 
+C30        CAP_CERAMIC                                                              TopLayer C0603_N                2165.351      3854.327      0        "Capacitor Ceramic" 
+C29        CAP_CERAMIC                                                              TopLayer C0603_N                1181.099      3854.327      0        "Capacitor Ceramic" 
+C28        CAP_CERAMIC                                                              TopLayer C0603_N                196.847       3854.327      0        "Capacitor Ceramic" 
+C27        CAP_CERAMIC                                                              TopLayer C0603_N                -787.405      3854.327      0        "Capacitor Ceramic" 
+C26        CAP_CERAMIC                                                              TopLayer C0603_N                6102.359      4838.579      0        "Capacitor Ceramic" 
+C25        CAP_CERAMIC                                                              TopLayer C0603_N                5118.107      4838.579      0        "Capacitor Ceramic" 
+C24        CAP_CERAMIC                                                              TopLayer C0603_N                4133.855      4838.579      0        "Capacitor Ceramic" 
+C23        CAP_CERAMIC                                                              TopLayer C0603_N                3149.603      4838.579      0        "Capacitor Ceramic" 
+C22        CAP_CERAMIC                                                              TopLayer C0603_N                2165.351      4838.579      0        "Capacitor Ceramic" 
+C21        CAP_CERAMIC                                                              TopLayer C0603_N                1181.099      4838.579      0        "Capacitor Ceramic" 
+C20        CAP_CERAMIC                                                              TopLayer C0603_N                196.847       4838.579      0        "Capacitor Ceramic" 
+C19        CAP_CERAMIC                                                              TopLayer C0603_N                -787.405      4838.579      0        "Capacitor Ceramic" 
+C18        ""                                                                       TopLayer C0603_N                3125.988      7452.753      90       "Capacitor Ceramic" 
+C17        ""                                                                       TopLayer C0603_N                3181.106      7452.753      90       "Capacitor Ceramic" 
+C16        CAP_CERAMIC                                                              TopLayer C0603_N                6102.359      5822.831      0        "Capacitor Ceramic" 
+C15        CAP_CERAMIC                                                              TopLayer C0603_N                5118.107      5822.831      0        "Capacitor Ceramic" 
+C14        CAP_CERAMIC                                                              TopLayer C0603_N                4133.855      5822.831      0        "Capacitor Ceramic" 
+C13        CAP_CERAMIC                                                              TopLayer C0603_N                3149.603      5822.831      0        "Capacitor Ceramic" 
+C12        CAP_CERAMIC                                                              TopLayer C0603_N                2165.351      5822.831      0        "Capacitor Ceramic" 
+C11        CAP_CERAMIC                                                              TopLayer C0603_N                1181.099      5822.831      0        "Capacitor Ceramic" 
+C10        CAP_CERAMIC                                                              TopLayer C0603_N                196.847       5822.831      0        "Capacitor Ceramic" 
+C9         CAP_CERAMIC                                                              TopLayer C0603_N                -787.405      5822.831      0        "Capacitor Ceramic" 
+C8         CAP_CERAMIC                                                              TopLayer C0603_N                6102.359      6807.083      0        "Capacitor Ceramic" 
+C7         CAP_CERAMIC                                                              TopLayer C0603_N                5118.107      6807.083      0        "Capacitor Ceramic" 
+C6         CAP_CERAMIC                                                              TopLayer C0603_N                4133.855      6807.083      0        "Capacitor Ceramic" 
+C5         CAP_CERAMIC                                                              TopLayer C0603_N                3149.603      6807.083      0        "Capacitor Ceramic" 
+D4         "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       -787.402      3937.008      0        =Description        
+D3         "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       -787.402      4921.260      0        =Description        
+D2         "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       -787.402      5905.512      0        =Description        
+D1         "WS2812 based digital RGB LED 2022 package"                              TopLayer LED_2022_WS2812B       -787.402      6889.764      0        =Description        
+C4         CAP_CERAMIC                                                              TopLayer C0603_N                2165.351      6807.083      0        "Capacitor Ceramic" 
+C3         CAP_CERAMIC                                                              TopLayer C0603_N                1181.099      6807.083      0        "Capacitor Ceramic" 
+C2         CAP_CERAMIC                                                              TopLayer C0603_N                196.847       6807.083      0        "Capacitor Ceramic" 
+C1         CAP_CERAMIC                                                              TopLayer C0603_N                -787.405      6807.083      0        "Capacitor Ceramic" 
