@@ -7,7 +7,7 @@
 /* we use our own custom debug lib */
 #include "debug.h"
 
-/* digital inputs (button matrix, encoders) */
+/* digital inputs: button matrix rows */
 #define ROW0_PORT GPIOB /* PB12: Row 0 */
 #define ROW0_PIN  GPIO_Pin_12
 #define ROW1_PORT GPIOB /* PB11: Row 1 */
@@ -26,7 +26,7 @@
 #define ROW7_PIN  GPIO_Pin_5
 #define N_ROWS    (8)
 
-/* digital outputs (button matrix, WS2812 LEDs) */
+/* digital outputs: button matrix columns */
 #define COL0_PORT GPIOC /* PC0: Col 0 */
 #define COL0_PIN  GPIO_Pin_0
 #define COL1_PORT GPIOC /* PC3: Col 1 */
@@ -47,6 +47,7 @@
 
 #define TIMER_FREQ ((SystemCoreClock / 10000) - 1) /* the output frequency of all timers: 100Hz */
 
+/* SPI1 for WS2812 LEDs */
 #define LED_PORT         GPIOA /* PA7: WS2812 leds (SPI1 MOSI) */
 #define LED_PIN          GPIO_Pin_7
 #define LEDS_NUM         (N_ROWS * N_COLS)
@@ -71,10 +72,7 @@
 #define MIDI_MAX     (0x7f)
 
 /* 3 bytes: version number
- * 1 byte: button matrix state
- * 2 * ADC_CHANNELS bytes: 1 analog input is 16 bit
- * 2 bytes: left encoder value
- * 2 bytes: right encoder value
+ * N_COLS bytes: button matrix state
  * 3 * LEDS_NUM bytes: red, green, blue value for each LED
  * */
 #define RESULT_BUFFER_SIZE (3 + N_COLS + (LEDS_NUM * 3))
@@ -92,8 +90,6 @@ static const uint8_t button_note[N_COLS][N_ROWS] = {
     {0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97}, /* col 7 */
 };
 
-#define BASE_NOTE_LEDS (0x20)
-
 typedef struct
 {
     uint8_t g; /* Green */
@@ -101,37 +97,36 @@ typedef struct
     uint8_t b; /* Blue */
 } ws2812b_color_t;
 
+/* Predefined color palette used when the host sends a CC value 1–9 to set an LED.
+ * Stored in GRB order (WS2812 wire format). Index 0 = value 1, index 8 = value 9.
+ * Value 0 turns the LED off (handled separately).
+ */
 static const ws2812b_color_t mixxx_palette[] = {
-    {.g = 0x0a, .r = 0xc5, .b = 0x08},
-    {.g = 0xbe, .r = 0x32, .b = 0x44},
-    {.g = 0xd4, .r = 0x42, .b = 0xf4},
-    {.g = 0xd2, .r = 0xf8, .b = 0x00},
-    {.g = 0x44, .r = 0x00, .b = 0xff},
-    {.g = 0x00, .r = 0xaf, .b = 0xcc},
-    {.g = 0xa6, .r = 0xfc, .b = 0xd7},
-    {.g = 0xf2, .r = 0xf2, .b = 0xff},
-    {.g = 0x80, .r = 0xff, .b = 0x00},
+    {.g = 0x0a, .r = 0xc5, .b = 0x08}, // 1: orange-red
+    {.g = 0xbe, .r = 0x32, .b = 0x44}, // 2: teal
+    {.g = 0xd4, .r = 0x42, .b = 0xf4}, // 3: yellow-green
+    {.g = 0xd2, .r = 0xf8, .b = 0x00}, // 4: warm white
+    {.g = 0x44, .r = 0x00, .b = 0xff}, // 5: blue
+    {.g = 0x00, .r = 0xaf, .b = 0xcc}, // 6: cyan
+    {.g = 0xa6, .r = 0xfc, .b = 0xd7}, // 7: white
+    {.g = 0xf2, .r = 0xf2, .b = 0xff}, // 8: bright white
+    {.g = 0x80, .r = 0xff, .b = 0x00}, // 9: green
 };
 
 /*
  * This struct contains all data that is available through I2C.
  * Use the following command with a Buspirate to test:
- * read version number : [ 0x72 0x00 [ 0x73 r:3 ]
- * read matrix state : [ 0x72 0x03 [ 0x73 r:1 ]
- * read analog inputs : [ 0x72 0x04 [ 0x73 r:16 ]
- * read buttons and analog inputs : [ 0x72 0x03 [ 0x73 r:17 ]
- * read left encoder : [ 0x72 0x14 [ 0x73 r:1 ]
- * read right encoder : [ 0x72 0x15 [ 0x73 r:1 ]
- * read both encoders : [ 0x72 0x14 [ 0x73 r:2 ]
- * turn on all leds : [ 0x72 0x16 0xFF:24 ]
- * turn off all leds : [ 0x72 0x16 0x00:24 ]
- * read everything : [ 0x72 0x00 [ 0x73 r:46 ]
+ * read version number : [ 0xAA 0x00 [ 0xAB r:3 ]
+ * read matrix state : [ 0xAA 0x03 [ 0xAB r:8 ]
+ * turn on all leds : [ 0xAA 0x0B 0xFF:192 ]
+ * turn off all leds : [ 0xAA 0x0B 0x00:192 ]
+ * read everything : [ 0xAA 0x00 [ 0xAB r:203 ]
  */
 typedef struct __attribute__((packed))
 {
     uint8_t version[3];             /* version number */
-    uint8_t matrix_state[N_COLS];   /* reference to the button state byte in the result buffer */
-    ws2812b_color_t leds[LEDS_NUM]; /* reference to the LED data in the result buffer */
+    uint8_t matrix_state[N_COLS];   /* button state bytes in the result buffer */
+    ws2812b_color_t leds[LEDS_NUM]; /* LED data in the result buffer */
 } addon_data_t;
 
 _Static_assert(sizeof(addon_data_t) == RESULT_BUFFER_SIZE, "raw data and struct size are not aligned!");
@@ -154,7 +149,7 @@ typedef struct
 /* Global Variables */
 static addon_state_t state;
 
-/* buffer to hold the SPI data for WS28212 */
+/* buffer to hold the SPI data for WS2812 */
 static uint8_t color_buf[COLOR_BUFFER_LEN] = {0};
 
 static void USART3_Output_Init(uint32_t baudrate)
@@ -280,7 +275,7 @@ void SPI_1Lines_HalfDuplex_Init(void)
 /*********************************************************************
  * @fn      SPI1_DMA_Init
  *
- * @brief   Initialize DMA for SPI2
+ * @brief   Initialize DMA for SPI1
  *
  * @return  none
  */
@@ -476,12 +471,12 @@ static void IIC_Init(uint32_t bound, uint16_t address)
     NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStruct);
 
-    I2C_ITConfig(I2C1, I2C_IT_EVT | I2C_IT_ERR | I2C_IT_BUF, ENABLE); /* TODO: also I2C_IT_BUF? */
     /* Enable I2C event, error, and buffer interrupts.
      * EVT fires on: address match, byte received, byte transmitted, stop detected.
      * ERR fires on: bus error, arbitration lost, acknowledge failure, etc.
      * BUF fires on: TXE/RXNE (needed so we get an interrupt for each data byte).
      */
+    I2C_ITConfig(I2C1, I2C_IT_EVT | I2C_IT_ERR | I2C_IT_BUF, ENABLE);
 
     /* Clock stretching: allow the slave to hold SCL low if it is not ready.
      * This prevents data loss when the interrupt handler is slightly slow.
@@ -710,6 +705,9 @@ static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value
 static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 {
     uint8_t channel = b1 & 0x0F;
+    uint8_t row;
+    uint8_t col;
+    uint8_t led_idx;
 
     switch (cin)
     {
@@ -733,28 +731,32 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             break;
 
         case 0x0B: /* Control Change */
-            /* TODO: use this to change the leds? */
-            if (b2 < BASE_NOTE_LEDS)
+            row = b2 >> 4;
+            col = (b2 & 0x0F);
+
+            if (row < 0x02 || row > 0x09)
             {
-                /* invalid led index */
+                /* invalid row index */
                 break;
             }
 
-            if ((b2 - BASE_NOTE_LEDS) >= LEDS_NUM)
+            if (col < 0x08)
             {
-                /* invalid led index */
+                /* invalid row index */
                 break;
             }
+
+            led_idx = ((row - 0x02) * N_ROWS) + col;
 
             if (b3 == 0)
             {
-                state.data.leds[b2 - BASE_NOTE_LEDS].r = 0;
-                state.data.leds[b2 - BASE_NOTE_LEDS].g = 0;
-                state.data.leds[b2 - BASE_NOTE_LEDS].b = 0;
+                state.data.leds[led_idx].r = 0;
+                state.data.leds[led_idx].g = 0;
+                state.data.leds[led_idx].b = 0;
             }
-            else if (b3 < 10)
+            else if (b3 < 0x0A)
             {
-                state.data.leds[b2 - BASE_NOTE_LEDS] = mixxx_palette[b3 - 1];
+                state.data.leds[led_idx] = mixxx_palette[b3 - 1];
             }
             state.flag_update_leds = 1;
             break;
