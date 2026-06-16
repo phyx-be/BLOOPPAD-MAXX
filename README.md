@@ -3,15 +3,29 @@ an illuminated 8x8 keypad with a cheap USB microcontroller.
 
 ![Picture of the PCB](media/BloopPad-MAXX_PCB.jpg)
 
+## Hardware
+
+There are 4 pins at the top to interact with a microcontroller using I2C:
+ * 5V
+ * GND
+ * SDA
+ * SCL
+
+> Caution: BloopPad Maxx runs at 5V! So you might need to add a level translator for the I2C pins.
+
+There are 64 WS2812c LEDs, each using around 25–30 mA, so we need around 2A from the host. To request 5V3A from the host, the 5K1 CC resistors are mounted on the USB-C connector.
+
+## Firmware
+
 This firmware runs on the [CH32X035](https://www.wch-ic.com/products/CH32X035.html) MCU of the BloopPad Maxx.
 
 The firmware handles different functions:
  * Read the button matrix
  * Set the button RGB LEDs
  * Send MIDI CC messages over USB to a PC and over UART
- * Allow control from other devices using I2C (Caution: BloopPad runs at 5V!)
+ * Allow control from other devices using I2C (Caution: BloopPad Maxx runs at 5V!)
 
-Please check the [schematics](TODO:local_link) to get more details about how these peripherals are connected to the CH32X035 MCU.
+Please check the [schematics](hardware/BloopPadMaxx_00/OUTPUT/BloopPadMaxx_00.PDF) to get more details about how these peripherals are connected to the CH32X035 MCU.
 
 ### MIDI messages
 
@@ -68,7 +82,7 @@ The BloopPad Maxx has I2C address `0x55` and uses the following registers to int
 | 0x03 | Button states | R | 8 | Reports the button states |
 | 0x0b | Button RGB LEDs | R/W | 192 | The RGB value of the button leds |
 
-## Building
+### Building
 
 Use [platformio](https://platformio.org) to build this project. You should install the [ch32v platform package](https://github.com/Community-PIO-CH32V/platform-ch32v) as well. Follow [these instructions](https://pio-ch32v.readthedocs.io/en/latest/installation.html) to do so. If you use the command line, build using:
 
@@ -76,7 +90,7 @@ Use [platformio](https://platformio.org) to build this project. You should insta
 pio run -e debug
 ```
 
-## Flashing
+### Flashing
 
 The easiest way to flash the BloopPad is using the USB port and a tool like [wchisp](https://github.com/ch32-rs/wchisp). First, disconnect the USB cable. While pressing the boot button on the board, reconnect the USB cable. Then run:
 

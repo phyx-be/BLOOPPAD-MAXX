@@ -880,8 +880,8 @@ int main(void)
             {
                 for (int r = 0; r < N_ROWS; r++)
                 {
-                    uint8_t current_button_state = (current_kb_result[c] & (1 << r)) & 0xff;
-                    uint8_t previous_button_state = (previous_kb_result[c] & (1 << r)) & 0xff;
+                    uint8_t current_button_state = (current_kb_result[r] & (1 << (N_COLS - 1 - c))) & 0xff;
+                    uint8_t previous_button_state = (previous_kb_result[r] & (1 << (N_COLS - 1 - c))) & 0xff;
 
                     if (current_button_state != previous_button_state)
                     {
