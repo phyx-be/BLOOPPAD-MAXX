@@ -8,46 +8,46 @@
 #include "debug.h"
 
 /* digital inputs (button matrix, encoders) */
-#define ROW0_PORT GPIOB // PB12: Row 0
+#define ROW0_PORT GPIOB /* PB12: Row 0 */
 #define ROW0_PIN  GPIO_Pin_12
-#define ROW1_PORT GPIOB // PB11: Row 1
+#define ROW1_PORT GPIOB /* PB11: Row 1 */
 #define ROW1_PIN  GPIO_Pin_11
-#define ROW2_PORT GPIOB // PB10: Row 2
+#define ROW2_PORT GPIOB /* PB10: Row 2 */
 #define ROW2_PIN  GPIO_Pin_10
-#define ROW3_PORT GPIOB // PB9: Row 3
+#define ROW3_PORT GPIOB /* PB9: Row 3 */
 #define ROW3_PIN  GPIO_Pin_9
-#define ROW4_PORT GPIOB // PB8: Row 4
+#define ROW4_PORT GPIOB /* PB8: Row 4 */
 #define ROW4_PIN  GPIO_Pin_8
-#define ROW5_PORT GPIOB // PB7: Row 5
+#define ROW5_PORT GPIOB /* PB7: Row 5 */
 #define ROW5_PIN  GPIO_Pin_7
-#define ROW6_PORT GPIOB // PB6: Row 6
+#define ROW6_PORT GPIOB /* PB6: Row 6 */
 #define ROW6_PIN  GPIO_Pin_6
-#define ROW7_PORT GPIOB // PB5: Row 7
+#define ROW7_PORT GPIOB /* PB5: Row 7 */
 #define ROW7_PIN  GPIO_Pin_5
 #define N_ROWS    (8)
 
 /* digital outputs (button matrix, WS2812 LEDs) */
-#define COL0_PORT GPIOC // PC0: Col 0
+#define COL0_PORT GPIOC /* PC0: Col 0 */
 #define COL0_PIN  GPIO_Pin_0
-#define COL1_PORT GPIOC // PC3: Col 1
+#define COL1_PORT GPIOC /* PC3: Col 1 */
 #define COL1_PIN  GPIO_Pin_3
-#define COL2_PORT GPIOA // PA0: Col 2
+#define COL2_PORT GPIOA /* PA0: Col 2 */
 #define COL2_PIN  GPIO_Pin_0
-#define COL3_PORT GPIOA // PA1: Col 3
+#define COL3_PORT GPIOA /* PA1: Col 3 */
 #define COL3_PIN  GPIO_Pin_1
-#define COL4_PORT GPIOA // PA2: Col 4
+#define COL4_PORT GPIOA /* PA2: Col 4 */
 #define COL4_PIN  GPIO_Pin_2
-#define COL5_PORT GPIOA // PA3: Col 5
+#define COL5_PORT GPIOA /* PA3: Col 5 */
 #define COL5_PIN  GPIO_Pin_3
-#define COL6_PORT GPIOA // PA4: Col 6
+#define COL6_PORT GPIOA /* PA4: Col 6 */
 #define COL6_PIN  GPIO_Pin_4
-#define COL7_PORT GPIOA // PA5: Col 7
+#define COL7_PORT GPIOA /* PA5: Col 7 */
 #define COL7_PIN  GPIO_Pin_5
 #define N_COLS    (8)
 
 #define TIMER_FREQ ((SystemCoreClock / 10000) - 1) /* the output frequency of all timers: 100Hz */
 
-#define LED_PORT         GPIOA // PA7: WS2812 leds (SPI1 MOSI)
+#define LED_PORT         GPIOA /* PA7: WS2812 leds (SPI1 MOSI) */
 #define LED_PIN          GPIO_Pin_7
 #define LEDS_NUM         (N_ROWS * N_COLS)
 #define Pixel_PRE_LEN    (12u)
@@ -82,23 +82,23 @@
 
 /* array to map a button to a note */
 static const uint8_t button_note[N_COLS][N_ROWS] = {
-    {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27}, // col 0
-    {0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37}, // col 1
-    {0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47}, // col 2
-    {0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57}, // col 3
-    {0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67}, // col 4
-    {0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77}, // col 5
-    {0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87}, // col 6
-    {0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97}, // col 7
+    {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27}, /* col 0 */
+    {0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37}, /* col 1 */
+    {0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47}, /* col 2 */
+    {0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57}, /* col 3 */
+    {0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67}, /* col 4 */
+    {0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77}, /* col 5 */
+    {0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87}, /* col 6 */
+    {0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97}, /* col 7 */
 };
 
 #define BASE_NOTE_LEDS (0x20)
 
 typedef struct
 {
-    uint8_t g; // Green
-    uint8_t r; // Red
-    uint8_t b; // Blue
+    uint8_t g; /* Green */
+    uint8_t r; /* Red */
+    uint8_t b; /* Blue */
 } ws2812b_color_t;
 
 static const ws2812b_color_t mixxx_palette[] = {
@@ -129,19 +129,19 @@ static const ws2812b_color_t mixxx_palette[] = {
  */
 typedef struct __attribute__((packed))
 {
-    uint8_t version[3];             // version number
-    uint8_t matrix_state[N_COLS];   // reference to the button state byte in the result buffer
-    ws2812b_color_t leds[LEDS_NUM]; // reference to the LED data in the result buffer
+    uint8_t version[3];             /* version number */
+    uint8_t matrix_state[N_COLS];   /* reference to the button state byte in the result buffer */
+    ws2812b_color_t leds[LEDS_NUM]; /* reference to the LED data in the result buffer */
 } addon_data_t;
 
 _Static_assert(sizeof(addon_data_t) == RESULT_BUFFER_SIZE, "raw data and struct size are not aligned!");
 
 typedef struct
 {
-    uint8_t flag_update_leds : 1;       // flag to indicate that the LEDs have to be updated with a new value from I2C/USB-MIDI
-    uint8_t flag_matrix_scan_done : 1;  // flag to indicate that the button matrix state has changed
+    uint8_t flag_update_leds : 1;       /* flag to indicate that the LEDs have to be updated with a new value from I2C/USB-MIDI */
+    uint8_t flag_matrix_scan_done : 1;  /* flag to indicate that the button matrix state has changed */
     uint8_t flag_slave_first_write : 1; /* set on every ADDR phase; the next RXNE byte is the register offset. */
-    uint8_t reserved : 5;               // reserved for future use
+    uint8_t reserved : 5;               /* reserved for future use */
     uint8_t slave_offset;               /* register offset captured after the most recent ADDR+W. */
     uint8_t slave_position;             /* current read/write cursor, reset to offset on every ADDR (including repeated-START), so write-then-read works without special-casing. */
     union
@@ -165,7 +165,7 @@ static void USART3_Output_Init(uint32_t baudrate)
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4; // PB3 (TX) PB4 (RX)
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4; /* PB3 (TX) PB4 (RX) */
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
     GPIO_Init(GPIOB, &GPIO_InitStructure);
@@ -269,7 +269,7 @@ void SPI_1Lines_HalfDuplex_Init(void)
     SPI_InitStructure.SPI_CPOL = SPI_CPOL_High;
     SPI_InitStructure.SPI_CPHA = SPI_CPHA_1Edge;
     SPI_InitStructure.SPI_NSS = SPI_NSS_Soft;
-    SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16; // TODO: check if we are at 6M with this, or use SPI_BaudRatePrescaler_8?
+    SPI_InitStructure.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16; /* TODO: check if we are at 6M with this, or use SPI_BaudRatePrescaler_8? */
     SPI_InitStructure.SPI_FirstBit = SPI_FirstBit_MSB;
     SPI_InitStructure.SPI_CRCPolynomial = 7;
     SPI_Init(SPI1, &SPI_InitStructure);
@@ -318,13 +318,13 @@ static void SPI1_DMA_Init(void)
  */
 static void w2812_sync(void)
 {
-    // copy from internal buffer to SPI buffer
+    /* copy from internal buffer to SPI buffer */
     for (int i = 0; i < LEDS_NUM; i++)
     {
         setPixelColor(i, state.data.leds[i].r, state.data.leds[i].g, state.data.leds[i].b);
     }
 
-    // enable DMA to set the leds
+    /* enable DMA to set the leds */
     while (DMA_GetCurrDataCounter(SPI1_DMA_TX_CH) != 0)
     {
         /* do nothing */
@@ -443,24 +443,24 @@ static void IIC_Init(uint32_t bound, uint16_t address)
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
 
     /* remap PC18/PC19 to I2C1 SDA/SCL */
-    GPIO_PinRemapConfig(GPIO_PartialRemap3_I2C1, ENABLE); // 011: Mapping (SCL/PC19, SDA/PC18)
+    GPIO_PinRemapConfig(GPIO_PartialRemap3_I2C1, ENABLE); /* 011: Mapping (SCL/PC19, SDA/PC18) */
 
     /* Disable DIO (SWD) interface on these pins */
     GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE);
 
     /* configure the GPIO as SDA/SCL pins */
     GPIO_InitStructure.GPIO_Pin = SDA_PIN | SCL_PIN;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP; // automatic open-drain
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP; /* automatic open-drain */
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOC, &GPIO_InitStructure);
 
     /* configure I2C1 */
-    I2C_InitStructure.I2C_ClockSpeed = bound;                                 // bus speed
-    I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;                                // there is only 1 mode
-    I2C_InitStructure.I2C_DutyCycle = I2C_DutyCycle_16_9;                     // I2C fast mode Tlow/Thigh = 16/9
-    I2C_InitStructure.I2C_OwnAddress1 = address << 1;                         // 7 or 10 bit address
-    I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;                               // automatic acknowledge
-    I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit; // use 7 bit address
+    I2C_InitStructure.I2C_ClockSpeed = bound;                                 /* bus speed */
+    I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;                                /* there is only 1 mode */
+    I2C_InitStructure.I2C_DutyCycle = I2C_DutyCycle_16_9;                     /* I2C fast mode Tlow/Thigh = 16/9 */
+    I2C_InitStructure.I2C_OwnAddress1 = address << 1;                         /* 7 or 10 bit address */
+    I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;                               /* automatic acknowledge */
+    I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit; /* use 7 bit address */
     I2C_Init(I2C1, &I2C_InitStructure);
 
     /* configure I2C interrupts */
@@ -476,7 +476,7 @@ static void IIC_Init(uint32_t bound, uint16_t address)
     NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStruct);
 
-    I2C_ITConfig(I2C1, I2C_IT_EVT | I2C_IT_ERR | I2C_IT_BUF, ENABLE); // TODO: also I2C_IT_BUF?
+    I2C_ITConfig(I2C1, I2C_IT_EVT | I2C_IT_ERR | I2C_IT_BUF, ENABLE); /* TODO: also I2C_IT_BUF? */
     /* Enable I2C event, error, and buffer interrupts.
      * EVT fires on: address match, byte received, byte transmitted, stop detected.
      * ERR fires on: bus error, arbitration lost, acknowledge failure, etc.
@@ -576,7 +576,7 @@ static void Matrix_Scan(void)
         if (scan_col == 0)
         {
             memcpy(state.data.matrix_state, scan_result, N_COLS);
-            state.flag_matrix_scan_done = 1; // indicate that a full scan was finished
+            state.flag_matrix_scan_done = 1; /* indicate that a full scan was finished */
             memset(scan_result, 0, N_COLS);
         }
     }
@@ -683,7 +683,7 @@ static void led_boot_sequence()
 static void USBSendPacket(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 {
     uint8_t packet[4];
-    packet[0] = (cin & 0x0F); // Cable 0
+    packet[0] = (cin & 0x0F); /* Cable 0 */
     packet[1] = b1;
     packet[2] = b2;
     packet[3] = b3;
@@ -713,11 +713,11 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 
     switch (cin)
     {
-        case 0x08: // Note Off
+        case 0x08: /* Note Off */
             PRINT("note off: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
             break;
 
-        case 0x09: // Note On
+        case 0x09: /* Note On */
             if (b3 > 0)
             {
                 PRINT("note on: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
@@ -728,21 +728,21 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             }
             break;
 
-        case 0x0A: // Poly Key Pressure
+        case 0x0A: /* Poly Key Pressure */
             PRINT("Poly key pressure: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
             break;
 
-        case 0x0B: // Control Change
-            // TODO: use this to change the leds?
+        case 0x0B: /* Control Change */
+            /* TODO: use this to change the leds? */
             if (b2 < BASE_NOTE_LEDS)
             {
-                // invalid led index
+                /* invalid led index */
                 break;
             }
 
             if ((b2 - BASE_NOTE_LEDS) >= LEDS_NUM)
             {
-                // invalid led index
+                /* invalid led index */
                 break;
             }
 
@@ -759,36 +759,36 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             state.flag_update_leds = 1;
             break;
 
-        case 0x0C: // Program Change
+        case 0x0C: /* Program Change */
             PRINT("Program change: channel %d, b2 0x%x\r\n", channel, b2);
             break;
 
-        case 0x0D: // Channel Pressure (Aftertouch)
+        case 0x0D: /* Channel Pressure (Aftertouch) */
             PRINT("Channel Pressure (Aftertouch): channel %d, b2 0x%x\r\n", channel, b2);
             break;
 
-        case 0x0E: // Pitch Bend
-            // Reconstruct 14-bit value from LSB (b2) and MSB (b3)
+        case 0x0E: /* Pitch Bend */
+            /* Reconstruct 14-bit value from LSB (b2) and MSB (b3) */
             int val = (b2 & 0x7F) | ((b3 & 0x7F) << 7);
-            val -= 8192; // Center at 0
+            val -= 8192; /* Center at 0 */
             PRINT("Pitch bend: channel %d, val %d\r\n", channel, val);
             break;
 
-        case 0x0F: // Single Byte (Real Time)
+        case 0x0F: /* Single Byte (Real Time) */
             PRINT("single byte: 0x%02x\r\n", b1);
             break;
 
-        // 0x05 could be SysEx end OR standard 1-byte System Common (Tune Request
-        // 0xF6)
+        /* 0x05 could be SysEx end OR standard 1-byte System Common (Tune Request
+         * 0xF6) */
         case 0x05:
             if (b1 >= 0xF8)
-            { // If it's real time embedded here (rare but legal)
+            { /* If it's real time embedded here (rare but legal) */
                 PRINT("SysEx?: 0x%02x\r\n", b1);
             }
             break;
 
         default:
-            // SysEx (0x04, 0x06, 0x07) and others ignored
+            /* SysEx (0x04, 0x06, 0x07) and others ignored */
             break;
     }
 }
@@ -824,16 +824,16 @@ int main(void)
     USART3_Output_Init(UART_BAUDRATE);
 
     /* makes sure that we can still flash using SWD */
-    Delay_Ms(1000); // give serial monitor time to open
+    Delay_Ms(1000); /* give serial monitor time to open */
 
     /* initialize i2c */
-    IIC_Init(I2C_SPEED, I2C_ADDRESS); // disables SWD
+    IIC_Init(I2C_SPEED, I2C_ADDRESS); /* disables SWD */
 
     PRINT("SystemClk: %u\r\n", (unsigned)SystemCoreClock);
     PRINT("ChipID: %08x\r\n", (unsigned)DBGMCU_GetCHIPID());
 
     /* Initialize timer for Keyboard and mouse scan timing */
-    Matrix_Init(1, TIMER_FREQ); // every 10 ms
+    Matrix_Init(1, TIMER_FREQ); /* every 10 ms */
 
     /* configure SPI1 for WS2812 */
     SPI_1Lines_HalfDuplex_Init();
@@ -845,10 +845,10 @@ int main(void)
 
     PRINT("BloopPad Maxx Init done\r\n");
 
-    // LED boot sequence
+    /* LED boot sequence */
     led_boot_sequence();
 
-    // clear all leds
+    /* clear all leds */
     setColor(0, 0, 0);
     w2812_sync();
 
@@ -906,7 +906,7 @@ int main(void)
         if (state.flag_update_leds)
         {
             state.flag_update_leds = 0;
-            // set the current led state to the leds
+            /* set the current led state to the leds */
             w2812_sync();
         }
     }
