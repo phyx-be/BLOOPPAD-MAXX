@@ -734,7 +734,7 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
                 break;
             }
 
-            led_idx = (row * N_ROWS) + col;
+            led_idx = ((col - 0x08) * N_ROWS) + row;
 
             if (b3 == 0)
             {
