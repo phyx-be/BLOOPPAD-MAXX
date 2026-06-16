@@ -1,7 +1,7 @@
 # BLOOPAD-MAXX
 an illuminated 8x8 keypad with a cheap USB microcontroller.
 
-This firmware runs on the [CH32X035](https://www.wch-ic.com/products/CH32X035.html) MCU of the BlooPad Maxx.
+This firmware runs on the [CH32X035](https://www.wch-ic.com/products/CH32X035.html) MCU of the BloopPad Maxx.
 
 The firmware handles different functions:
  * Read the button matrix
