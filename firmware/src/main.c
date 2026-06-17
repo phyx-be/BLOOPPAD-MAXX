@@ -90,6 +90,7 @@ typedef struct
  * Value 0 turns the LED off (handled separately).
  */
 static const ws2812b_color_t mixxx_palette[] = {
+    {.g = 0x00, .r = 0x00, .b = 0x00}, /* 0: led off */
     {.g = 0x0a, .r = 0xc5, .b = 0x08}, /* 1: orange-red */
     {.g = 0xbe, .r = 0x32, .b = 0x44}, /* 2: teal */
     {.g = 0xd4, .r = 0x42, .b = 0xf4}, /* 3: yellow-green */
@@ -754,28 +755,25 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             if (row >= N_ROWS)
             {
                 /* invalid row index */
+                PRINT("Control Change: invalid row index b2 0x%x\r\n", b2);
                 break;
             }
 
             if (col < 0x08)
             {
-                /* invalid col index */
+                /* low nibble 0–7: this is a button-event CC#, not an LED command */
+                PRINT("Control Change: invalid column index b2 0x%x\r\n", b2);
                 break;
             }
 
-            led_idx = ((col - 0x08) * N_ROWS) + row;
-
-            if (b3 == 0)
+            if (b3 < (sizeof(mixxx_palette) / sizeof(mixxx_palette[0])))
             {
-                state.data.leds[led_idx].r = 0;
-                state.data.leds[led_idx].g = 0;
-                state.data.leds[led_idx].b = 0;
+                led_idx = ((col - 0x08) * N_ROWS) + row;
+                state.data.leds[led_idx] = mixxx_palette[b3];
+                state.flag_update_leds = 1;
+            } else {
+                PRINT("Control Change: invalid color index b3 0x%x\r\n", b3);
             }
-            else if (b3 < 0x0A)
-            {
-                state.data.leds[led_idx] = mixxx_palette[b3 - 1];
-            }
-            state.flag_update_leds = 1;
             break;
 
         case 0x0C: /* Program Change */
