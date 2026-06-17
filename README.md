@@ -101,5 +101,5 @@ wchisp flash <path to the firmware.bin file>
 Or using Platformio:
 
 ```
-pio run -t upload
+pio run -e debug -t upload
 ```

@@ -90,15 +90,15 @@ typedef struct
  * Value 0 turns the LED off (handled separately).
  */
 static const ws2812b_color_t mixxx_palette[] = {
-    {.g = 0x0a, .r = 0xc5, .b = 0x08}, // 1: orange-red
-    {.g = 0xbe, .r = 0x32, .b = 0x44}, // 2: teal
-    {.g = 0xd4, .r = 0x42, .b = 0xf4}, // 3: yellow-green
-    {.g = 0xd2, .r = 0xf8, .b = 0x00}, // 4: warm white
-    {.g = 0x44, .r = 0x00, .b = 0xff}, // 5: blue
-    {.g = 0x00, .r = 0xaf, .b = 0xcc}, // 6: cyan
-    {.g = 0xa6, .r = 0xfc, .b = 0xd7}, // 7: white
-    {.g = 0xf2, .r = 0xf2, .b = 0xff}, // 8: bright white
-    {.g = 0x80, .r = 0xff, .b = 0x00}, // 9: green
+    {.g = 0x0a, .r = 0xc5, .b = 0x08}, /* 1: orange-red */
+    {.g = 0xbe, .r = 0x32, .b = 0x44}, /* 2: teal */
+    {.g = 0xd4, .r = 0x42, .b = 0xf4}, /* 3: yellow-green */
+    {.g = 0xd2, .r = 0xf8, .b = 0x00}, /* 4: warm white */
+    {.g = 0x44, .r = 0x00, .b = 0xff}, /* 5: blue */
+    {.g = 0x00, .r = 0xaf, .b = 0xcc}, /* 6: cyan */
+    {.g = 0xa6, .r = 0xfc, .b = 0xd7}, /* 7: white */
+    {.g = 0xf2, .r = 0xf2, .b = 0xff}, /* 8: bright white */
+    {.g = 0x80, .r = 0xff, .b = 0x00}, /* 9: green */
 };
 
 /*
@@ -164,13 +164,26 @@ static void USART3_Output_Init(uint32_t baudrate)
     USART_Cmd(USART3, ENABLE);
 }
 
+/* WS2812 LEDs use a 1-wire protocol where a '1' bit is a ~0.8µs high pulse and
+ * a '0' bit is a ~0.4µs high pulse. We drive the data line via SPI at ~6 MHz
+ * (one SPI bit ≈ 167 ns), which means each WS2812 bit maps to 4 SPI bits:
+ *   WS2812 '1' → 1110 (0xE in a nibble)
+ *   WS2812 '0' → 1000 (0x8 in a nibble)
+ * Two WS2812 bits are packed into one SPI byte, so each LED color byte (8 bits)
+ * expands to 4 SPI bytes.  Three color channels (GRB order) → 12 SPI bytes per LED
+ * (Pixel_PRE_LEN = 12). The reset pulse is at least 50µs of low; Pixel_RESET_LEN
+ * zero-bytes pad the end of the DMA buffer.
+ */
+
 /*********************************************************************
  * @fn      convToBit
  *
- * @brief   Convert hex to spi bit
+ * @brief   Encode one byte of WS2812 color data into 4 SPI bytes.
+ *          Each input bit becomes a nibble: 0xE for a '1', 0x8 for a '0'.
+ *          Two nibbles are packed per output byte, MSB first.
  *
- * @param   res  - the result
- *          input - input data
+ * @param   res   - output buffer (must have room for 4 bytes)
+ *          input - color channel byte to encode
  *
  * @return  none
  */
@@ -307,7 +320,9 @@ static void w2812_sync(void)
         setPixelColor(i, state.data.leds[i].r, state.data.leds[i].g, state.data.leds[i].b);
     }
 
-    /* enable DMA to set the leds */
+    /* Wait for the previous DMA transfer to finish, then restart it.
+     * DMA_Mode_Normal does not reload automatically, so we must disable,
+     * reset the counter, and re-enable to send the next frame. */
     while (DMA_GetCurrDataCounter(SPI1_DMA_TX_CH) != 0)
     {
         /* do nothing */
@@ -525,6 +540,18 @@ static void Matrix_Set_Col(uint8_t col)
  *
  * @return  none
  */
+/* Matrix_Scan is called from TIM3.  It scans one column at a time using a
+ * 2-sample debounce:
+ *   - at tick 5:  take the first sample of the active column's rows
+ *   - at tick 10: take a second sample; only commit if both agree
+ * scan_col advances after each 10-tick cycle; a complete 8-column scan
+ * finishes every 80 TIM3 ticks.
+ *
+ * Hardware: row inputs use pull-ups (GPIO_Mode_IPU), columns are driven low
+ * to select them (active-low).  A pressed button pulls the row pin low → bit=0.
+ * The raw value is inverted (~scan) so that a pressed button maps to bit=1.
+ * Row pins PB5–PB12 are shifted right by 5 to land in bits [7:0].
+ */
 static void Matrix_Scan(void)
 {
     static uint8_t scan_cnt = 0;
@@ -535,18 +562,17 @@ static void Matrix_Scan(void)
     scan_cnt++;
     if ((scan_cnt % 10) == 0)
     {
-        /* reset the debounce counter */
         scan_cnt = 0;
 
-        /* Determine whether the two scan results are consistent (debouncing) */
+        /* second sample: accept only if it matches the first sample (debounce) */
         if (scan == ((GPIO_ReadInputData(GPIOB) >> 5) & 0xff))
         {
-            /* now set the result for this column scan */
+            /* both samples agree — store the result for this column (active-low → invert) */
             scan_result[scan_col] = ~scan;
         }
         else
         {
-            /* TODO: in this case we should keep the previous state */
+            /* samples disagree (bouncing) — keep the previous state for this column */
         }
 
         /* activate the next column */
@@ -565,7 +591,7 @@ static void Matrix_Scan(void)
     }
     else if ((scan_cnt % 5) == 0)
     {
-        /* Save the first scan result */
+        /* first sample: record the raw row state mid-period */
         scan = (GPIO_ReadInputData(GPIOB) >> 5) & 0xff;
     }
 }
@@ -587,7 +613,7 @@ static void Matrix_Init(uint16_t arr, uint16_t psc)
     TIM_TimeBaseInitTypeDef TIM_TimeBaseStructure = {0};
     NVIC_InitTypeDef NVIC_InitStructure = {0};
 
-    /* Enable GPIOB clock */
+    /* enable GPIOA, GPIOB, GPIOC, and AFIO clocks */
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO | RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC, ENABLE);
 
     /* Enable Timer3 Clock */
@@ -671,6 +697,8 @@ static void USBSendPacket(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
     packet[2] = b2;
     packet[3] = b3;
     USB_write(packet, 4);
+    /* In debug builds, UART3 is shared with the serial monitor, so MIDI output
+     * over UART is disabled to avoid corrupting the debug stream. */
 #ifndef DEBUG
     for (int i = 0; i < 4; i++)
     {
@@ -683,8 +711,9 @@ static void USBSendPacket(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 #endif
 }
 
-/* The value of the CC is equal to 64 (0x40)plus/minus the number of steps, for
- * example for 10 steps back the value would be 54 (0x36). */
+/* Send a MIDI Control Change message over USB (and UART when not in debug mode).
+ * Used to report button press/release: control = CC# encoding (row, col),
+ * value = MIDI_MAX (0x7f) on press, 0 on release. */
 static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value)
 {
     USBSendPacket(0x0B, 0xB0 | (channel & 0x0F), control, value);
@@ -720,9 +749,9 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 
         case 0x0B: /* Control Change */
             row = b2 >> 4;
-            col = (b2 & 0x0F);
+            col = b2 & 0x0F;
 
-            if (row > 0x07)
+            if (row >= N_ROWS)
             {
                 /* invalid row index */
                 break;
@@ -826,7 +855,7 @@ int main(void)
     PRINT("SystemClk: %u\r\n", (unsigned)SystemCoreClock);
     PRINT("ChipID: %08x\r\n", (unsigned)DBGMCU_GetCHIPID());
 
-    /* Initialize timer for Keyboard and mouse scan timing */
+    /* initialize TIM3 for button matrix scan */
     Matrix_Init(1, TIMER_FREQ); /* every 10 ms */
 
     /* configure SPI1 for WS2812 */
@@ -863,7 +892,7 @@ int main(void)
             }
         }
 
-        /* uart receive midi CC message */
+        /* receive MIDI packets from UART (non-blocking, one byte per iteration) */
         while (USART_GetFlagStatus(USART3, USART_FLAG_RXNE) != RESET)
         {
             uart_midi_pkt[uart_midi_pkt_count++] = USART_ReceiveData(USART3);
