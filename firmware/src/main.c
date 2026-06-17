@@ -86,8 +86,7 @@ typedef struct
 } ws2812b_color_t;
 
 /* Predefined color palette used when the host sends a CC value 1–9 to set an LED.
- * Stored in GRB order (WS2812 wire format). Index 0 = value 1, index 8 = value 9.
- * Value 0 turns the LED off (handled separately).
+ * Stored in GRB order (WS2812 wire format). Value 0 turns the LED off.
  */
 static const ws2812b_color_t mixxx_palette[] = {
     {.g = 0x00, .r = 0x00, .b = 0x00}, /* 0: led off */
@@ -137,6 +136,12 @@ typedef struct
 
 /* Global Variables */
 static addon_state_t state;
+
+/* variables for MIDI SysEx processing */
+#define MAX_SYSEX_DATA (0xff)
+static uint8_t in_sysex = 0;
+static uint8_t sysex_data[MAX_SYSEX_DATA];
+static uint8_t sysex_data_len = 0;
 
 /* buffer to hold the SPI data for WS2812 */
 static uint8_t color_buf[COLOR_BUFFER_LEN] = {0};
@@ -720,6 +725,54 @@ static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value
     USBSendPacket(0x0B, 0xB0 | (channel & 0x0F), control, value);
 }
 
+static void finalize_sysex(void)
+{
+    if (sysex_data_len < 8)
+    {
+        PRINT("Unsupported SysEx size: %d\r\n", sysex_data_len);
+        goto out;
+    }
+
+    if (sysex_data[1] != 0x13 || sysex_data[2] != 0x37)
+    {
+        PRINT("SysEx: Unsupported manufacturing ID: 0x%02X%02X\r\n", sysex_data[1], sysex_data[2]);
+        goto out;
+    }
+
+    uint8_t row = sysex_data[3] >> 4;
+    uint8_t col = sysex_data[3] & 0x0F;
+
+    if (row >= N_ROWS)
+    {
+        /* invalid row index */
+        PRINT("SysEx: invalid row index sysex_data[3] 0x%x\r\n", sysex_data[3]);
+        goto out;
+    }
+
+    if (col < 0x08)
+    {
+        /* invalid col index */
+        PRINT("SysEx: invalid column index sysex_data[3] 0x%x\r\n", sysex_data[3]);
+        goto out;
+    }
+
+    uint8_t led_idx = ((col - 0x08) * N_ROWS) + row;
+
+    state.data.leds[led_idx].r = sysex_data[4] << 1;
+    state.data.leds[led_idx].g = sysex_data[5] << 1;
+    state.data.leds[led_idx].b = sysex_data[6] << 1;
+    state.flag_update_leds = 1;
+
+    if (sysex_data[7] != 0xF7)
+    {
+        PRINT("SysEx: invalid end: 0x%x\r\n", sysex_data[7]);
+    }
+
+out:
+    in_sysex = 0;
+    sysex_data_len = 0;
+}
+
 static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 {
     uint8_t channel = b1 & 0x0F;
@@ -749,6 +802,12 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             break;
 
         case 0x0B: /* Control Change */
+            if (channel != MIDI_CHANNEL)
+            {
+                PRINT("we ignore channel %d\r\n", channel);
+                break;
+            }
+
             row = b2 >> 4;
             col = b2 & 0x0F;
 
@@ -795,17 +854,67 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             PRINT("single byte: 0x%02x\r\n", b1);
             break;
 
-        /* 0x05 could be SysEx end OR standard 1-byte System Common (Tune Request
-         * 0xF6) */
-        case 0x05:
-            if (b1 >= 0xF8)
-            { /* If it's real time embedded here (rare but legal) */
-                PRINT("SysEx?: 0x%02x\r\n", b1);
+        case 0x04: /* SysEx start/continue */
+
+            /* SysEx start */
+            if (b1 == 0xF0)
+            {
+                sysex_data_len = 0;
+                in_sysex = 1;
+            }
+
+            /* SysEx continues — but only if b1 is not a status byte */
+            if (((in_sysex && !(b1 & 0x80)) || b1 == 0xF0) && sysex_data_len < (MAX_SYSEX_DATA - 3))
+            {
+                sysex_data[sysex_data_len++] = b1;
+                sysex_data[sysex_data_len++] = b2;
+                sysex_data[sysex_data_len++] = b3;
+            }
+
+            break;
+
+        case 0x05: /* could be SysEx end (1-byte) OR standard 1-byte System Common (Tune Request 0xF6) */
+            if (b1 == 0xF7 && in_sysex && sysex_data_len < (MAX_SYSEX_DATA - 1))
+            {
+                sysex_data[sysex_data_len++] = 0xF7;
+                finalize_sysex();
+            }
+            else if (b1 == 0xF6)
+            {
+                // handle_tune_request();
+                PRINT("Handle tune request\r\n");
+            }
+            break;
+
+        case 0x06: /* SysEx end (2-byte) or empty SysEx */
+            if (b1 == 0xF0 && !in_sysex)
+            {
+                // Rare: entire 2-byte SysEx (F0 F7) — Empty SysEx
+                // process_sysex(...);
+                PRINT("Empty SysEx\r\n");
+                sysex_data_len = 0;
+                in_sysex = 0;
+            }
+            else if (in_sysex && b2 == 0xF7 && sysex_data_len < (MAX_SYSEX_DATA - 2))
+            {
+                sysex_data[sysex_data_len++] = b1;
+                sysex_data[sysex_data_len++] = 0xF7;
+                finalize_sysex();
+            }
+            break;
+
+        case 0x07: /* SysEx end (3-byte) */
+            if (in_sysex && b3 == 0xF7 && sysex_data_len < (MAX_SYSEX_DATA - 3))
+            {
+                sysex_data[sysex_data_len++] = b1;
+                sysex_data[sysex_data_len++] = b2;
+                sysex_data[sysex_data_len++] = 0xF7;
+                finalize_sysex();
             }
             break;
 
         default:
-            /* SysEx (0x04, 0x06, 0x07) and others ignored */
+            /* others ignored */
             break;
     }
 }

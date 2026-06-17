@@ -57,7 +57,7 @@ De LEDs beneath the buttons can be controlled by sending a MIDI CC message with 
 | 6 | 0x68 | 0x69 | 0x6A | 0x6B | 0x6C | 0x6D | 0x6E | 0x6F |
 | 7 | 0x78 | 0x79 | 0x7A | 0x7B | 0x7C | 0x7D | 0x7E | 0x7F |
 
-This is the mapping between the value and the RGB color of the LED:
+This is the mapping between the value and the RGB color of the LED to send using a MIDI CC message:
 
 | Value | Red | Green | Blue | Name |
 |-|-|-|-|-|
@@ -71,6 +71,14 @@ This is the mapping between the value and the RGB color of the LED:
 | 0x07 | 0xfc | 0xa6 | 0xd7 | white |
 | 0x08 | 0xf2 | 0xf2 | 0xff | bright white |
 | 0x09 | 0xff | 0x80 | 0x00 | green |
+
+To control the full RGB color of each LED individually using MIDI, we need 4 bytes (LED index, red, green, blue), which is more than the 3 bytes that are available in a Control Change message. That is why we use MIDI System Exclusive (SysEx) messages for this. The format is:
+
+```
+F0 13 37 <led> <red> <green> <blue> F7
+```
+
+The first byte `0xF0` indicates the start of a SysEx MIDI message. Byte 2 and 3 indicate a manufacturer ID (`0x1337` in our case). The 4th byte is the LED index as described above. The next 3 bytes are the `red`, `green` and `blue` bytes. Their value can be max `0x7F` in a MIDI SysEx message, so make sure you right-shift your RGB data before sending. The last byte `0xF7` indicates the end of the SysEx message.
 
 ### I2C
 
