@@ -138,10 +138,10 @@ typedef struct
 static addon_state_t state;
 
 /* variables for MIDI SysEx processing */
-#define MAX_SYSEX_DATA (0xff)
+#define MAX_SYSEX_DATA ((4 * LEDS_NUM) + 4)
 static uint8_t in_sysex = 0;
 static uint8_t sysex_data[MAX_SYSEX_DATA];
-static uint8_t sysex_data_len = 0;
+static int sysex_data_len = 0;
 
 /* buffer to hold the SPI data for WS2812 */
 static uint8_t color_buf[COLOR_BUFFER_LEN] = {0};
@@ -727,7 +727,7 @@ static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value
 
 static void finalize_sysex(void)
 {
-    if (sysex_data_len < 8)
+    if (sysex_data_len < 8 || (sysex_data_len % 4) != 0)
     {
         PRINT("Unsupported SysEx size: %d\r\n", sysex_data_len);
         goto out;
@@ -739,33 +739,32 @@ static void finalize_sysex(void)
         goto out;
     }
 
-    uint8_t row = sysex_data[3] >> 4;
-    uint8_t col = sysex_data[3] & 0x0F;
-
-    if (row >= N_ROWS)
+    for (int i = 3; (i + 4) < sysex_data_len && sysex_data[i] != 0xF7; i += 4)
     {
-        /* invalid row index */
-        PRINT("SysEx: invalid row index sysex_data[3] 0x%x\r\n", sysex_data[3]);
-        goto out;
-    }
 
-    if (col < 0x08)
-    {
-        /* invalid col index */
-        PRINT("SysEx: invalid column index sysex_data[3] 0x%x\r\n", sysex_data[3]);
-        goto out;
-    }
+        uint8_t row = sysex_data[i] >> 4;
+        uint8_t col = sysex_data[i] & 0x0F;
 
-    uint8_t led_idx = ((col - 0x08) * N_ROWS) + row;
+        if (row >= N_ROWS)
+        {
+            /* invalid row index */
+            PRINT("SysEx: invalid row index sysex_data[%d] 0x%x\r\n", i, sysex_data[i]);
+            continue;
+        }
 
-    state.data.leds[led_idx].r = sysex_data[4] << 1;
-    state.data.leds[led_idx].g = sysex_data[5] << 1;
-    state.data.leds[led_idx].b = sysex_data[6] << 1;
-    state.flag_update_leds = 1;
+        if (col < 0x08)
+        {
+            /* col must be 0x08–0x0F for LED addressing (low nibble 0–7 is button-event space) */
+            PRINT("SysEx: invalid column index sysex_data[%d] 0x%x\r\n", i, sysex_data[i]);
+            continue;
+        }
 
-    if (sysex_data[7] != 0xF7)
-    {
-        PRINT("SysEx: invalid end: 0x%x\r\n", sysex_data[7]);
+        uint8_t led_idx = ((col - 0x08) * N_ROWS) + row;
+
+        state.data.leds[led_idx].r = sysex_data[i + 1] << 1;
+        state.data.leds[led_idx].g = sysex_data[i + 2] << 1;
+        state.data.leds[led_idx].b = sysex_data[i + 3] << 1;
+        state.flag_update_leds = 1;
     }
 
 out:
@@ -830,7 +829,9 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
                 led_idx = ((col - 0x08) * N_ROWS) + row;
                 state.data.leds[led_idx] = mixxx_palette[b3];
                 state.flag_update_leds = 1;
-            } else {
+            }
+            else
+            {
                 PRINT("Control Change: invalid color index b3 0x%x\r\n", b3);
             }
             break;
