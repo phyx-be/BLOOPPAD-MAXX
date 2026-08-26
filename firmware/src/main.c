@@ -590,7 +590,6 @@ static void Matrix_Scan(void)
         {
             memcpy(state.data.matrix_state, scan_result, N_COLS);
             state.flag_matrix_scan_done = 1; /* indicate that a full scan was finished */
-            memset(scan_result, 0, N_COLS);
         }
     }
     else if ((scan_cnt % 5) == 0)
