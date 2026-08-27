@@ -862,7 +862,7 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             }
 
             /* SysEx continues — but only if b1 is not a status byte */
-            if (((in_sysex && !(b1 & 0x80)) || b1 == 0xF0) && sysex_data_len < (MAX_SYSEX_DATA - 3))
+            if (((in_sysex && !(b1 & 0x80)) || b1 == 0xF0) && sysex_data_len < (MAX_SYSEX_DATA - 2))
             {
                 sysex_data[sysex_data_len++] = b1;
                 sysex_data[sysex_data_len++] = b2;
@@ -872,9 +872,9 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             break;
 
         case 0x05: /* could be SysEx end (1-byte) OR standard 1-byte System Common (Tune Request 0xF6) */
-            if (b1 == 0xF7 && in_sysex && sysex_data_len < (MAX_SYSEX_DATA - 1))
+            if (in_sysex && b1 == 0xF7 && sysex_data_len < MAX_SYSEX_DATA)
             {
-                sysex_data[sysex_data_len++] = 0xF7;
+                sysex_data[sysex_data_len++] = b1;
                 finalize_sysex();
             }
             else if (b1 == 0xF6)
@@ -893,20 +893,20 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
                 sysex_data_len = 0;
                 in_sysex = 0;
             }
-            else if (in_sysex && b2 == 0xF7 && sysex_data_len < (MAX_SYSEX_DATA - 2))
+            else if (in_sysex && b2 == 0xF7 && sysex_data_len < (MAX_SYSEX_DATA - 1))
             {
                 sysex_data[sysex_data_len++] = b1;
-                sysex_data[sysex_data_len++] = 0xF7;
+                sysex_data[sysex_data_len++] = b2;
                 finalize_sysex();
             }
             break;
 
         case 0x07: /* SysEx end (3-byte) */
-            if (in_sysex && b3 == 0xF7 && sysex_data_len < (MAX_SYSEX_DATA - 3))
+            if (in_sysex && b3 == 0xF7 && sysex_data_len < (MAX_SYSEX_DATA - 2))
             {
                 sysex_data[sysex_data_len++] = b1;
                 sysex_data[sysex_data_len++] = b2;
-                sysex_data[sysex_data_len++] = 0xF7;
+                sysex_data[sysex_data_len++] = b3;
                 finalize_sysex();
             }
             break;
