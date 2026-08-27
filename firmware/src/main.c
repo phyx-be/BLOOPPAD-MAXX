@@ -71,6 +71,33 @@
 #define MIDI_CHANNEL (0)
 #define MIDI_MAX     (0x7f)
 
+/* USB-MIDI Code Index Numbers (CIN), USB MIDI spec table 4-1 */
+#define MIDI_CIN_SYSEX_START_CONT  (0x04) /* SysEx starts or continues */
+#define MIDI_CIN_SYSEX_END_1BYTE   (0x05) /* SysEx ends with following single byte, or 1-byte System Common */
+#define MIDI_CIN_SYSEX_END_2BYTE   (0x06) /* SysEx ends with following two bytes, or empty SysEx */
+#define MIDI_CIN_SYSEX_END_3BYTE   (0x07) /* SysEx ends with following three bytes */
+#define MIDI_CIN_NOTE_OFF          (0x08)
+#define MIDI_CIN_NOTE_ON           (0x09)
+#define MIDI_CIN_POLY_KEY_PRESSURE (0x0A)
+#define MIDI_CIN_CONTROL_CHANGE    (0x0B)
+#define MIDI_CIN_PROGRAM_CHANGE    (0x0C)
+#define MIDI_CIN_CHANNEL_PRESSURE  (0x0D)
+#define MIDI_CIN_PITCH_BEND        (0x0E)
+#define MIDI_CIN_SINGLE_BYTE       (0x0F) /* System Real-Time */
+#define MIDI_CIN_MASK              (0x0F)
+
+/* MIDI channel voice/system status bytes */
+#define MIDI_STATUS_CONTROL_CHANGE (0xB0)
+#define MIDI_STATUS_BIT            (0x80) /* set on every status byte, clear on every data byte */
+#define MIDI_CHANNEL_MASK          (0x0F)
+#define MIDI_SYSEX_START           (0xF0)
+#define MIDI_SYSEX_END             (0xF7)
+#define MIDI_TUNE_REQUEST          (0xF6)
+
+/* SysEx manufacturer ID bytes identifying our custom BloopPad Maxx LED protocol */
+#define SYSEX_MANUFACTURER_ID_1 (0x13)
+#define SYSEX_MANUFACTURER_ID_2 (0x37)
+
 /* 3 bytes: version number
  * N_COLS bytes: button matrix state
  * 3 * LEDS_NUM bytes: red, green, blue value for each LED
@@ -695,7 +722,7 @@ static void led_boot_sequence()
 static void USBSendPacket(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 {
     uint8_t packet[4];
-    packet[0] = (cin & 0x0F); /* Cable 0 */
+    packet[0] = (cin & MIDI_CIN_MASK); /* Cable 0 */
     packet[1] = b1;
     packet[2] = b2;
     packet[3] = b3;
@@ -719,7 +746,7 @@ static void USBSendPacket(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
  * value = MIDI_MAX (0x7f) on press, 0 on release. */
 static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value)
 {
-    USBSendPacket(0x0B, 0xB0 | (channel & 0x0F), control, value);
+    USBSendPacket(MIDI_CIN_CONTROL_CHANGE, MIDI_STATUS_CONTROL_CHANGE | (channel & MIDI_CHANNEL_MASK), control, value);
 }
 
 static void finalize_sysex(void)
@@ -730,13 +757,13 @@ static void finalize_sysex(void)
         goto out;
     }
 
-    if (sysex_data[1] != 0x13 || sysex_data[2] != 0x37)
+    if (sysex_data[1] != SYSEX_MANUFACTURER_ID_1 || sysex_data[2] != SYSEX_MANUFACTURER_ID_2)
     {
         PRINT("SysEx: Unsupported manufacturing ID: 0x%02X%02X\r\n", sysex_data[1], sysex_data[2]);
         goto out;
     }
 
-    for (int i = 3; (i + 4) < sysex_data_len && sysex_data[i] != 0xF7; i += 4)
+    for (int i = 3; (i + 4) < sysex_data_len && sysex_data[i] != MIDI_SYSEX_END; i += 4)
     {
 
         uint8_t row = sysex_data[i] >> 4;
@@ -758,6 +785,9 @@ static void finalize_sysex(void)
 
         uint8_t led_idx = ((col - 0x08) * N_ROWS) + row;
 
+        /* SysEx data bytes are 7-bit (0-127);
+         * shift left to scale into the 8-bit 0-254 color range
+         */
         state.data.leds[led_idx].r = sysex_data[i + 1] << 1;
         state.data.leds[led_idx].g = sysex_data[i + 2] << 1;
         state.data.leds[led_idx].b = sysex_data[i + 3] << 1;
@@ -771,18 +801,18 @@ out:
 
 static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 {
-    uint8_t channel = b1 & 0x0F;
+    uint8_t channel = b1 & MIDI_CHANNEL_MASK;
     uint8_t row;
     uint8_t col;
     uint8_t led_idx;
 
     switch (cin)
     {
-        case 0x08: /* Note Off */
+        case MIDI_CIN_NOTE_OFF:
             PRINT("note off: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
             break;
 
-        case 0x09: /* Note On */
+        case MIDI_CIN_NOTE_ON:
             if (b3 > 0)
             {
                 PRINT("note on: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
@@ -793,11 +823,11 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             }
             break;
 
-        case 0x0A: /* Poly Key Pressure */
+        case MIDI_CIN_POLY_KEY_PRESSURE:
             PRINT("Poly key pressure: channel %d, note %d, velocity %d\r\n", channel, b2, b3);
             break;
 
-        case 0x0B: /* Control Change */
+        case MIDI_CIN_CONTROL_CHANGE:
             if (channel != MIDI_CHANNEL)
             {
                 PRINT("we ignore channel %d\r\n", channel);
@@ -833,36 +863,36 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             }
             break;
 
-        case 0x0C: /* Program Change */
+        case MIDI_CIN_PROGRAM_CHANGE:
             PRINT("Program change: channel %d, b2 0x%x\r\n", channel, b2);
             break;
 
-        case 0x0D: /* Channel Pressure (Aftertouch) */
+        case MIDI_CIN_CHANNEL_PRESSURE:
             PRINT("Channel Pressure (Aftertouch): channel %d, b2 0x%x\r\n", channel, b2);
             break;
 
-        case 0x0E: /* Pitch Bend */
+        case MIDI_CIN_PITCH_BEND:
             /* Reconstruct 14-bit value from LSB (b2) and MSB (b3) */
             int val = (b2 & 0x7F) | ((b3 & 0x7F) << 7);
             val -= 8192; /* Center at 0 */
             PRINT("Pitch bend: channel %d, val %d\r\n", channel, val);
             break;
 
-        case 0x0F: /* Single Byte (Real Time) */
+        case MIDI_CIN_SINGLE_BYTE:
             PRINT("single byte: 0x%02x\r\n", b1);
             break;
 
-        case 0x04: /* SysEx start/continue */
+        case MIDI_CIN_SYSEX_START_CONT:
 
             /* SysEx start */
-            if (b1 == 0xF0)
+            if (b1 == MIDI_SYSEX_START)
             {
                 sysex_data_len = 0;
                 in_sysex = 1;
             }
 
             /* SysEx continues — but only if b1 is not a status byte */
-            if (((in_sysex && !(b1 & 0x80)) || b1 == 0xF0) && sysex_data_len < (MAX_SYSEX_DATA - 2))
+            if (((in_sysex && !(b1 & MIDI_STATUS_BIT)) || b1 == MIDI_SYSEX_START) && sysex_data_len < (MAX_SYSEX_DATA - 2))
             {
                 sysex_data[sysex_data_len++] = b1;
                 sysex_data[sysex_data_len++] = b2;
@@ -871,21 +901,21 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 
             break;
 
-        case 0x05: /* could be SysEx end (1-byte) OR standard 1-byte System Common (Tune Request 0xF6) */
-            if (in_sysex && b1 == 0xF7 && sysex_data_len < MAX_SYSEX_DATA)
+        case MIDI_CIN_SYSEX_END_1BYTE: /* could be SysEx end (1-byte) OR standard 1-byte System Common (Tune Request) */
+            if (in_sysex && b1 == MIDI_SYSEX_END && sysex_data_len < MAX_SYSEX_DATA)
             {
                 sysex_data[sysex_data_len++] = b1;
                 finalize_sysex();
             }
-            else if (b1 == 0xF6)
+            else if (b1 == MIDI_TUNE_REQUEST)
             {
                 // handle_tune_request();
                 PRINT("Handle tune request\r\n");
             }
             break;
 
-        case 0x06: /* SysEx end (2-byte) or empty SysEx */
-            if (b1 == 0xF0 && !in_sysex)
+        case MIDI_CIN_SYSEX_END_2BYTE: /* SysEx end (2-byte) or empty SysEx */
+            if (b1 == MIDI_SYSEX_START && !in_sysex)
             {
                 // Rare: entire 2-byte SysEx (F0 F7) — Empty SysEx
                 // process_sysex(...);
@@ -893,7 +923,7 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
                 sysex_data_len = 0;
                 in_sysex = 0;
             }
-            else if (in_sysex && b2 == 0xF7 && sysex_data_len < (MAX_SYSEX_DATA - 1))
+            else if (in_sysex && b2 == MIDI_SYSEX_END && sysex_data_len < (MAX_SYSEX_DATA - 1))
             {
                 sysex_data[sysex_data_len++] = b1;
                 sysex_data[sysex_data_len++] = b2;
@@ -901,8 +931,8 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             }
             break;
 
-        case 0x07: /* SysEx end (3-byte) */
-            if (in_sysex && b3 == 0xF7 && sysex_data_len < (MAX_SYSEX_DATA - 2))
+        case MIDI_CIN_SYSEX_END_3BYTE:
+            if (in_sysex && b3 == MIDI_SYSEX_END && sysex_data_len < (MAX_SYSEX_DATA - 2))
             {
                 sysex_data[sysex_data_len++] = b1;
                 sysex_data[sysex_data_len++] = b2;
@@ -993,7 +1023,7 @@ int main(void)
         {
             if (USB_read(midi_pkt, 4) == 4)
             {
-                handle_midi(midi_pkt[0] & 0x0F, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
+                handle_midi(midi_pkt[0] & MIDI_CIN_MASK, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
             }
         }
 
@@ -1004,7 +1034,7 @@ int main(void)
             if (uart_midi_pkt_count == 4)
             {
                 uart_midi_pkt_count = 0;
-                handle_midi(uart_midi_pkt[0] & 0x0F, uart_midi_pkt[1], uart_midi_pkt[2], uart_midi_pkt[3]);
+                handle_midi(uart_midi_pkt[0] & MIDI_CIN_MASK, uart_midi_pkt[1], uart_midi_pkt[2], uart_midi_pkt[3]);
             }
         }
 
