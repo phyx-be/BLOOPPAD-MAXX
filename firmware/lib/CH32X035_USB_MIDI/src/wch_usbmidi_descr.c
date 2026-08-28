@@ -1,3 +1,5 @@
+#include <stdlib.h> /* atoi() */
+
 #include "wch_usbmidi_usb.h"
 #include "wch_usbmidi_config.h"
 #include "wch_usbmidi_internal.h"
@@ -159,11 +161,17 @@ USB_STR_DESCR wch_usbmidi_InterfDescr = {
 };
 
 // Helper functions (copied from USBSerial)
+static const char hex_chars[] = "0123456789ABCDEF";
+
 void uint32_to_hex_string(uint32_t value, char* output) {
-    const char hex_chars[] = "0123456789ABCDEF";
     for (int i = 7; i >= 0; i--) {
         output[7-i] = hex_chars[(value >> (i * 4)) & 0xF];
     }
+}
+
+void uint8_to_hex_string(uint8_t value, char* output) {
+    output[0] = hex_chars[(value >> 4) & 0xF];
+    output[1] = hex_chars[value & 0xF];
 }
 
 void string_to_utf16le_descriptor(const char* source, uint16_t* dest, int max_len) {
@@ -190,18 +198,29 @@ void generate_unique_serial_descriptor(void) {
     uint32_t uid1 = *(volatile uint32_t*)CH32X035_ESIG_UNIID1;
     uint32_t uid2 = *(volatile uint32_t*)CH32X035_ESIG_UNIID2; 
     uint32_t uid3 = *(volatile uint32_t*)CH32X035_ESIG_UNIID3;
-    
-    char hex_string[24];
-    uint32_to_hex_string(uid3, &hex_string[0]);
-    uint32_to_hex_string(uid2, &hex_string[8]);
-    uint32_to_hex_string(uid1, &hex_string[16]);
-    
+
+    char uid_hex_string[WCH_USBMIDI_UID_HEX_CHARS];
+    uint32_to_hex_string(uid3, &uid_hex_string[0]);
+    uint32_to_hex_string(uid2, &uid_hex_string[8]);
+    uint32_to_hex_string(uid1, &uid_hex_string[16]);
+
+    char version_hex_string[WCH_USBMIDI_VERSION_HEX_CHARS];
+    uint8_to_hex_string((uint8_t)(atoi(VERSION_MAJOR) & 0xFF), &version_hex_string[0]);
+    uint8_to_hex_string((uint8_t)(atoi(VERSION_MINOR) & 0xFF), &version_hex_string[2]);
+    uint8_to_hex_string((uint8_t)(atoi(VERSION_PATCH) & 0xFF), &version_hex_string[4]);
+
+    int pos = 0;
+
     for (int i = 0; i < (int)WCH_USBMIDI_SERIAL_PREFIX_LEN; i++) {
-        wch_usbmidi_SerDescr.bString[i] = (uint16_t)WCH_USBMIDI_SERIAL_PREFIX[i];
+        wch_usbmidi_SerDescr.bString[pos++] = (uint16_t)WCH_USBMIDI_SERIAL_PREFIX[i];
     }
-    
-    for (int i = 0; i < WCH_USBMIDI_UID_HEX_CHARS; i++) {
-        wch_usbmidi_SerDescr.bString[WCH_USBMIDI_SERIAL_PREFIX_LEN + i] = (uint16_t)hex_string[i];
+
+    for (int i = 0; i < (int)WCH_USBMIDI_VERSION_HEX_CHARS; i++) {
+        wch_usbmidi_SerDescr.bString[pos++] = (uint16_t)version_hex_string[i];
+    }
+
+    for (int i = 0; i < (int)WCH_USBMIDI_UID_HEX_CHARS; i++) {
+        wch_usbmidi_SerDescr.bString[pos++] = (uint16_t)uid_hex_string[i];
     }
 }
 
