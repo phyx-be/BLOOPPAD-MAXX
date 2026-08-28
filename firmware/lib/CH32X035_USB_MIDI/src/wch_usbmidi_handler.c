@@ -6,7 +6,12 @@ volatile uint16_t USB_SetupLen;
 const uint8_t*    USB_pDescr;
 
 // RX FIFO
-#define RX_FIFO_SIZE 256
+// Sized for the worst case: a full-LED SysEx update is MAX_SYSEX_DATA (see main.c,
+// currently 260) raw payload bytes. USB-MIDI packs at most 3 payload bytes per
+// 4-byte packet, so that needs ceil(260/3)*4 = 348 raw bytes here. Kept with
+// headroom above that so a single large SysEx can never overrun and get silently
+// truncated by rx_fifo_push() while the main loop is draining it.
+#define RX_FIFO_SIZE 512
 volatile uint8_t rx_fifo[RX_FIFO_SIZE];
 volatile uint16_t rx_head = 0;
 volatile uint16_t rx_tail = 0;
