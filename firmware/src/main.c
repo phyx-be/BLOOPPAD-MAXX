@@ -1,5 +1,4 @@
 #include <ch32x035.h> /* both X033 and X035 */
-#include <stdlib.h>   /* atoi() */
 #include <string.h>   /* memset() */
 
 #include <wch_usbmidi_internal.h>
@@ -56,17 +55,6 @@
 #define COLOR_BUFFER_LEN (((LEDS_NUM * 3) * Pixel_PRE_LEN) + Pixel_RESET_LEN)
 #define SPI1_DMA_TX_CH   DMA1_Channel3
 
-/* I2C on the expansion connector towards the badge */
-#define SDA_PORT         GPIOC
-#define SDA_PIN          GPIO_Pin_18
-#define SCL_PORT         GPIOC
-#define SCL_PIN          GPIO_Pin_19
-#define I2C_ADDRESS      (0x55)
-#define I2C_TIMEOUT      (-2)
-#define I2C_TIMEOUT_TICK (1000)
-#define I2C_SPEED        (400000)
-#define UART_BAUDRATE    (115200)
-
 /* midi-usb */
 #define MIDI_CHANNEL (0)
 #define MIDI_MAX     (0x7f)
@@ -98,13 +86,6 @@
 #define SYSEX_MANUFACTURER_ID_1 (0x13)
 #define SYSEX_MANUFACTURER_ID_2 (0x37)
 
-/* 3 bytes: version number
- * N_COLS bytes: button matrix state
- * 3 * LEDS_NUM bytes: red, green, blue value for each LED
- * */
-#define RESULT_BUFFER_SIZE (3 + N_COLS + (LEDS_NUM * 3))
-#define RESULT_RW_OFFSET   (3 + N_COLS)
-
 typedef struct
 {
     uint8_t g; /* Green */
@@ -128,37 +109,13 @@ static const ws2812b_color_t mixxx_palette[] = {
     {.g = 0x80, .r = 0xff, .b = 0x00}, /* 9: green */
 };
 
-/*
- * This struct contains all data that is available through I2C.
- * Use the following command with a Buspirate to test:
- * read version number : [ 0xAA 0x00 [ 0xAB r:3 ]
- * read matrix state : [ 0xAA 0x03 [ 0xAB r:8 ]
- * turn on all leds : [ 0xAA 0x0B 0xFF:192 ]
- * turn off all leds : [ 0xAA 0x0B 0x00:192 ]
- * read everything : [ 0xAA 0x00 [ 0xAB r:203 ]
- */
-typedef struct __attribute__((packed))
-{
-    uint8_t version[3];             /* version number */
-    uint8_t matrix_state[N_COLS];   /* button state bytes in the result buffer */
-    ws2812b_color_t leds[LEDS_NUM]; /* LED data in the result buffer */
-} addon_data_t;
-
-_Static_assert(sizeof(addon_data_t) == RESULT_BUFFER_SIZE, "raw data and struct size are not aligned!");
-
 typedef struct
 {
-    uint8_t flag_update_leds : 1;       /* flag to indicate that the LEDs have to be updated with a new value from I2C/USB-MIDI */
-    uint8_t flag_matrix_scan_done : 1;  /* flag to indicate that the button matrix state has changed */
-    uint8_t flag_slave_first_write : 1; /* set on every ADDR phase; the next RXNE byte is the register offset. */
-    uint8_t reserved : 5;               /* reserved for future use */
-    uint8_t slave_offset;               /* register offset captured after the most recent ADDR+W. */
-    uint8_t slave_position;             /* current read/write cursor, reset to offset on every ADDR (including repeated-START), so write-then-read works without special-casing. */
-    union
-    {
-        addon_data_t data;
-        uint8_t raw_data[RESULT_BUFFER_SIZE];
-    };
+    uint8_t flag_update_leds : 1;      /* flag to indicate that the LEDs have to be updated with a new value from USB-MIDI */
+    uint8_t flag_matrix_scan_done : 1; /* flag to indicate that the button matrix state has changed */
+    uint8_t reserved : 6;              /* reserved for future use */
+    uint8_t matrix_state[N_COLS];      /* button state bytes */
+    ws2812b_color_t leds[LEDS_NUM];    /* LED data */
 } addon_state_t;
 
 /* Global Variables */
@@ -172,30 +129,6 @@ static int sysex_data_len = 0;
 
 /* buffer to hold the SPI data for WS2812 */
 static uint8_t color_buf[COLOR_BUFFER_LEN] = {0};
-
-static void USART3_Output_Init(uint32_t baudrate)
-{
-    GPIO_InitTypeDef GPIO_InitStructure;
-    USART_InitTypeDef USART_InitStructure;
-
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
-
-    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3 | GPIO_Pin_4; /* PB3 (TX) PB4 (RX) */
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-    GPIO_Init(GPIOB, &GPIO_InitStructure);
-
-    USART_InitStructure.USART_BaudRate = baudrate;
-    USART_InitStructure.USART_WordLength = USART_WordLength_8b;
-    USART_InitStructure.USART_StopBits = USART_StopBits_1;
-    USART_InitStructure.USART_Parity = USART_Parity_No;
-    USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
-    USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
-
-    USART_Init(USART3, &USART_InitStructure);
-    USART_Cmd(USART3, ENABLE);
-}
 
 /* WS2812 LEDs use a 1-wire protocol where a '1' bit is a ~0.8µs high pulse and
  * a '0' bit is a ~0.4µs high pulse. We drive the data line via SPI at ~6 MHz
@@ -350,7 +283,7 @@ static void w2812_sync(void)
     /* copy from internal buffer to SPI buffer */
     for (int i = 0; i < LEDS_NUM; i++)
     {
-        setPixelColor(i, state.data.leds[i].r, state.data.leds[i].g, state.data.leds[i].b);
+        setPixelColor(i, state.leds[i].r, state.leds[i].g, state.leds[i].b);
     }
 
     /* Wait for the previous DMA transfer to finish, then restart it.
@@ -364,161 +297,6 @@ static void w2812_sync(void)
     DMA_Cmd(SPI1_DMA_TX_CH, DISABLE);
     DMA_SetCurrDataCounter(SPI1_DMA_TX_CH, COLOR_BUFFER_LEN);
     DMA_Cmd(SPI1_DMA_TX_CH, ENABLE);
-}
-
-/* function to process I2C slave data transfers */
-/* reference: arduino implementation */
-static void i2c_slave_process(void)
-{
-    uint32_t flag1 = 0, flag2 = 0;
-
-    /* Snapshot all pending event flags in one read to avoid races. */
-    flag1 = I2C1->STAR1;
-
-    /* ADDR: our slave address was matched on the bus (start of any transaction).
-     * Reset slave_position to slave_offset so that a repeated-START read begins
-     * at the register the master last wrote, without needing a new WRITE phase.
-     * Set flag_slave_first_write so the next RXNE byte is treated as the
-     * register pointer rather than payload data.
-     */
-    if (flag1 & I2C_STAR1_ADDR)
-    {
-        state.slave_position = state.slave_offset;
-        state.flag_slave_first_write = 1;
-    }
-
-    /* RXNE: receive data register not empty — master sent a byte.
-     * The first byte after address+W is the register pointer; every byte
-     * after that is payload to be written into the register map.
-     */
-    if (flag1 & I2C_STAR1_RXNE)
-    {
-        uint8_t byte = I2C_ReceiveData(I2C1);
-        if (state.flag_slave_first_write)
-        {
-            /* Register pointer: latch it as both the persistent offset (used to
-             * reset slave_position on repeated-START) and the current cursor.
-             */
-            state.slave_offset = byte;
-            state.slave_position = byte;
-            state.flag_slave_first_write = 0;
-        }
-        else
-        {
-            if (state.slave_position < RESULT_BUFFER_SIZE)
-            {
-                if (state.slave_position >= RESULT_RW_OFFSET)
-                {
-                    /* Writable region (LED data): store the byte and notify the main loop. */
-                    state.raw_data[state.slave_position] = byte;
-                    state.flag_update_leds = 1;
-                }
-            }
-            state.slave_position++;
-        }
-    }
-
-    /* Process transmitting data (master is reading from us).
-     * Send one byte from raw_data[] at the current pointer position and advance
-     * the pointer so consecutive TXE interrupts walk through the register file.
-     * If slave_position is out of range, send 0x00 as a safe dummy byte.
-     */
-    if (flag1 & I2C_STAR1_TXE)
-    {
-        if (state.slave_position < RESULT_BUFFER_SIZE)
-        {
-            I2C_SendData(I2C1, state.raw_data[state.slave_position++]);
-        }
-        else
-        {
-            /* send dummy data */
-            I2C_SendData(I2C1, 0x00);
-        }
-    }
-
-    /* STOPF: master issued a STOP condition, ending the current transaction.
-     * Hardware clears STOPF by: read STAR1 (done above) then write CTLR1.
-     */
-    if (flag1 & I2C_STAR1_STOPF)
-    {
-        /* writing CTLR1 after reading STAR1 clears STOPF */
-        I2C1->CTLR1 &= ~(I2C_CTLR1_STOP);
-
-        /* Re-arm "next byte is a register offset" here too, not just on ADDR.
-         * If back-to-back transactions leave too little bus-free time, the next
-         * transaction's ADDR event can be missed/coalesced; without this, its
-         * offset byte would be written into raw_data[] as stray data instead of
-         * being captured as the new offset.
-         */
-        state.flag_slave_first_write = 1;
-    }
-
-    /* Reading STAR2 releases clock stretching so the master can continue.
-     * The dummy cast suppresses the unused-variable warning.
-     */
-    flag2 = I2C1->STAR2;
-    (void)flag2;
-}
-
-/* initialize the I2C interface */
-static void IIC_Init(uint32_t bound, uint16_t address)
-{
-    GPIO_InitTypeDef GPIO_InitStructure = {0};
-    I2C_InitTypeDef I2C_InitStructure = {0};
-    NVIC_InitTypeDef NVIC_InitStruct = {0};
-
-    /* enable I2C1 and GPIOC clocks */
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
-    RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
-
-    /* remap PC18/PC19 to I2C1 SDA/SCL */
-    GPIO_PinRemapConfig(GPIO_PartialRemap3_I2C1, ENABLE); /* 011: Mapping (SCL/PC19, SDA/PC18) */
-
-    /* Disable DIO (SWD) interface on these pins */
-    GPIO_PinRemapConfig(GPIO_Remap_SWJ_Disable, ENABLE);
-
-    /* configure the GPIO as SDA/SCL pins */
-    GPIO_InitStructure.GPIO_Pin = SDA_PIN | SCL_PIN;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP; /* automatic open-drain */
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_Init(GPIOC, &GPIO_InitStructure);
-
-    /* configure I2C1 */
-    I2C_InitStructure.I2C_ClockSpeed = bound;                                 /* bus speed */
-    I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;                                /* there is only 1 mode */
-    I2C_InitStructure.I2C_DutyCycle = I2C_DutyCycle_16_9;                     /* I2C fast mode Tlow/Thigh = 16/9 */
-    I2C_InitStructure.I2C_OwnAddress1 = address << 1;                         /* 7 or 10 bit address */
-    I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;                               /* automatic acknowledge */
-    I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit; /* use 7 bit address */
-    I2C_Init(I2C1, &I2C_InitStructure);
-
-    /* configure I2C interrupts */
-    NVIC_InitStruct.NVIC_IRQChannel = I2C1_EV_IRQn;
-    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;
-    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 1;
-    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStruct);
-
-    NVIC_InitStruct.NVIC_IRQChannel = I2C1_ER_IRQn;
-    NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0;
-    NVIC_InitStruct.NVIC_IRQChannelSubPriority = 1;
-    NVIC_InitStruct.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_Init(&NVIC_InitStruct);
-
-    /* Enable I2C event, error, and buffer interrupts.
-     * EVT fires on: address match, byte received, byte transmitted, stop detected.
-     * ERR fires on: bus error, arbitration lost, acknowledge failure, etc.
-     * BUF fires on: TXE/RXNE (needed so we get an interrupt for each data byte).
-     */
-    I2C_ITConfig(I2C1, I2C_IT_EVT | I2C_IT_ERR | I2C_IT_BUF, ENABLE);
-
-    /* Clock stretching: allow the slave to hold SCL low if it is not ready.
-     * This prevents data loss when the interrupt handler is slightly slow.
-     */
-    I2C_StretchClockCmd(I2C1, ENABLE);
-
-    /* enable I2C1 */
-    I2C_Cmd(I2C1, ENABLE);
 }
 
 /* activate a single column of the button matrix (=set to low) */
@@ -615,7 +393,7 @@ static void Matrix_Scan(void)
          */
         if (scan_col == 0)
         {
-            memcpy(state.data.matrix_state, scan_result, N_COLS);
+            memcpy(state.matrix_state, scan_result, N_COLS);
             state.flag_matrix_scan_done = 1; /* indicate that a full scan was finished */
         }
     }
@@ -698,9 +476,9 @@ static void setColor(uint8_t r, uint8_t g, uint8_t b)
 {
     for (int i = 0; i < LEDS_NUM; i++)
     {
-        state.data.leds[i].r = r;
-        state.data.leds[i].g = g;
-        state.data.leds[i].b = b;
+        state.leds[i].r = r;
+        state.leds[i].g = g;
+        state.leds[i].b = b;
     }
 }
 
@@ -727,21 +505,9 @@ static void USBSendPacket(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
     packet[2] = b2;
     packet[3] = b3;
     USB_write(packet, 4);
-    /* In debug builds, UART3 is shared with the serial monitor, so MIDI output
-     * over UART is disabled to avoid corrupting the debug stream. */
-#ifndef DEBUG
-    for (int i = 0; i < 4; i++)
-    {
-        while (USART_GetFlagStatus(USART3, USART_FLAG_TC) == RESET)
-        {
-            /* do nothing */
-        }
-        USART_SendData(USART3, packet[i]);
-    }
-#endif
 }
 
-/* Send a MIDI Control Change message over USB (and UART when not in debug mode).
+/* Send a MIDI Control Change message over USB.
  * Used to report button press/release: control = CC# encoding (row, col),
  * value = MIDI_MAX (0x7f) on press, 0 on release. */
 static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value)
@@ -788,9 +554,9 @@ static void finalize_sysex(void)
         /* SysEx data bytes are 7-bit (0-127);
          * shift left to scale into the 8-bit 0-254 color range
          */
-        state.data.leds[led_idx].r = sysex_data[i + 1] << 1;
-        state.data.leds[led_idx].g = sysex_data[i + 2] << 1;
-        state.data.leds[led_idx].b = sysex_data[i + 3] << 1;
+        state.leds[led_idx].r = sysex_data[i + 1] << 1;
+        state.leds[led_idx].g = sysex_data[i + 2] << 1;
+        state.leds[led_idx].b = sysex_data[i + 3] << 1;
         state.flag_update_leds = 1;
     }
 
@@ -854,7 +620,7 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             if (b3 < (sizeof(mixxx_palette) / sizeof(mixxx_palette[0])))
             {
                 led_idx = ((col - 0x08) * N_ROWS) + row;
-                state.data.leds[led_idx] = mixxx_palette[b3];
+                state.leds[led_idx] = mixxx_palette[b3];
                 state.flag_update_leds = 1;
             }
             else
@@ -951,23 +717,12 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 int main(void)
 {
     uint8_t midi_pkt[4];
-    uint8_t uart_midi_pkt[4];
-    uint8_t uart_midi_pkt_count = 0;
     uint8_t previous_kb_result[N_COLS] = {0};
     uint8_t current_kb_result[N_COLS] = {0};
 
     /* set all data and flags to 0 */
     memset(&state, 0, sizeof(addon_state_t));
     memset(midi_pkt, 0, 4);
-    memset(uart_midi_pkt, 0, 4);
-
-    /* set the version number from git */
-    char version_major[] = VERSION_MAJOR;
-    char version_minor[] = VERSION_MINOR;
-    char version_patch[] = VERSION_PATCH;
-    state.data.version[0] = atoi(version_major) & 0xff;
-    state.data.version[1] = atoi(version_minor) & 0xff;
-    state.data.version[2] = atoi(version_patch) & 0xff;
 
     SystemInit();
 #ifdef NVIC_PriorityGroup_2
@@ -977,15 +732,7 @@ int main(void)
 #endif
     SystemCoreClockUpdate();
     Delay_Init();
-
-    /* configure UART3 as serial monitor */
-    USART3_Output_Init(UART_BAUDRATE);
-
-    /* makes sure that we can still flash using SWD */
-    Delay_Ms(1000); /* give serial monitor time to open */
-
-    /* initialize i2c */
-    IIC_Init(I2C_SPEED, I2C_ADDRESS); /* disables SWD */
+    Delay_Ms(1000);
 
     PRINT("SystemClk: %u\r\n", (unsigned)SystemCoreClock);
     PRINT("ChipID: %08x\r\n", (unsigned)DBGMCU_GetCHIPID());
@@ -1016,7 +763,7 @@ int main(void)
         {
             /* take a local copy of the current button state */
             state.flag_matrix_scan_done = 0;
-            memcpy(current_kb_result, state.data.matrix_state, N_COLS);
+            memcpy(current_kb_result, state.matrix_state, N_COLS);
         }
 
         if (USB_available())
@@ -1024,17 +771,6 @@ int main(void)
             if (USB_read(midi_pkt, 4) == 4)
             {
                 handle_midi(midi_pkt[0] & MIDI_CIN_MASK, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
-            }
-        }
-
-        /* receive MIDI packets from UART (non-blocking, one byte per iteration) */
-        while (USART_GetFlagStatus(USART3, USART_FLAG_RXNE) != RESET)
-        {
-            uart_midi_pkt[uart_midi_pkt_count++] = USART_ReceiveData(USART3);
-            if (uart_midi_pkt_count == 4)
-            {
-                uart_midi_pkt_count = 0;
-                handle_midi(uart_midi_pkt[0] & MIDI_CIN_MASK, uart_midi_pkt[1], uart_midi_pkt[2], uart_midi_pkt[3]);
             }
         }
 
@@ -1090,28 +826,4 @@ void HardFault_Handler(void)
     while (1)
     {
     }
-}
-
-/* Generic I2C1 IRQ (not used; event/error are handled by the dedicated handlers below) */
-void I2C1_IRQHandler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
-void I2C1_IRQHandler(void)
-{
-    PRINT("I2C1_IRQHandler\r\n");
-}
-
-/* I2C1 event interrupt: address match, data received/transmitted, stop detected */
-void I2C1_EV_IRQHandler(void) __attribute__((interrupt));
-void I2C1_EV_IRQHandler(void)
-{
-    i2c_slave_process();
-}
-
-/* I2C1 error interrupt: bus error, arbitration loss, acknowledge failure, etc. */
-void I2C1_ER_IRQHandler(void) __attribute__((interrupt));
-void I2C1_ER_IRQHandler(void)
-{
-    uint16_t STAR1 = I2C1->STAR1;
-    if (STAR1 & I2C_STAR1_BERR) I2C1->STAR1 &= ~I2C_STAR1_BERR;
-    if (STAR1 & I2C_STAR1_ARLO) I2C1->STAR1 &= ~I2C_STAR1_ARLO;
-    if (STAR1 & I2C_STAR1_AF) I2C1->STAR1 &= ~I2C_STAR1_AF;
 }
