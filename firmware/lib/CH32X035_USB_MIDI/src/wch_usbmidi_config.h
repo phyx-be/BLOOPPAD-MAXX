@@ -4,8 +4,8 @@
 #define CH32X035_ESIG_UNIID2    0x1FFFF7EC
 #define CH32X035_ESIG_UNIID3    0x1FFFF7F0
 
-#define WCH_USBMIDI_MANUF_STR            "WCH"
-#define WCH_USBMIDI_PROD_STR             "CH32X035-MIDI"
+#define WCH_USBMIDI_MANUF_STR            "PHYX"
+#define WCH_USBMIDI_PROD_STR             "BLOOPPAD-MAXX"
 #define WCH_USBMIDI_INTERF_STR           "USBMIDI"
 #define WCH_USBMIDI_SERIAL_PREFIX        "MD"
 
