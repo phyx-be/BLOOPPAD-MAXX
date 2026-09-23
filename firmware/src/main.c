@@ -1,4 +1,5 @@
 #include <ch32x035.h> /* both X033 and X035 */
+#include <stdlib.h>   /* atoi() */
 #include <string.h>   /* memset() */
 
 #include <wch_usbmidi_internal.h>
@@ -482,18 +483,32 @@ static void setColor(uint8_t r, uint8_t g, uint8_t b)
     }
 }
 
-/* execute a led animation */
+/* show a value in binary on a single row of leds, MSB in column 0 */
+static void showBinaryRow(uint8_t row, uint8_t value, uint8_t r, uint8_t g, uint8_t b)
+{
+    for (int col = 0; col < N_COLS; col++)
+    {
+        if (value & (1 << (N_COLS - 1 - col)))
+        {
+            uint8_t led_idx = (col * N_ROWS) + row;
+            state.leds[led_idx].r = r;
+            state.leds[led_idx].g = g;
+            state.leds[led_idx].b = b;
+        }
+    }
+}
+
+/* show the firmware version (built from git tags via VERSION_MAJOR/MINOR/PATCH macros) in binary:
+ * major on row 0 (red), minor on row 1 (green), patch on row 2 (blue)
+ */
 static void led_boot_sequence()
 {
-    setColor(255, 0, 0);
+    setColor(0, 0, 0);
+    showBinaryRow(0, atoi(VERSION_MAJOR) & 0xff, 255, 0, 0);
+    showBinaryRow(1, atoi(VERSION_MINOR) & 0xff, 0, 255, 0);
+    showBinaryRow(2, atoi(VERSION_PATCH) & 0xff, 0, 0, 255);
     w2812_sync();
-    Delay_Ms(500);
-    setColor(0, 255, 0);
-    w2812_sync();
-    Delay_Ms(500);
-    setColor(0, 0, 255);
-    w2812_sync();
-    Delay_Ms(500);
+    Delay_Ms(2000);
 }
 
 /* send a USB packet */
