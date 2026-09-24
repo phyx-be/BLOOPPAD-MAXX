@@ -24,6 +24,7 @@ static const menu_item_t menu[GAME_COLS] = {
     [0] = {.run = connect_four_run, .name = "CONNECT 4", .color = {.r = 255, .g = 255, .b = 0}},
     [1] = {.run = button_masher_run, .name = "MASHER", .color = {.r = 255, .g = 0, .b = 255}},
     [2] = {.run = tug_of_war_run, .name = "TUG OF WAR", .color = {.r = 0, .g = 255, .b = 255}},
+    [3] = {.run = rainbow_run, .name = "RAINBOW", .color = {.r = 0, .g = 255, .b = 0}},
     [MENU_COL_MIDI] = {.run = midi_run, .name = "MIDI", .color = {.r = 255, .g = 255, .b = 255}},
 };
 
