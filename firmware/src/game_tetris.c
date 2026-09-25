@@ -329,7 +329,7 @@ static void tt_game_over(void)
         }
         else
         {
-            game_render_text(text, elapsed - TT_FLASH_MS, game_white, 0);
+            game_render_text(text, elapsed - TT_FLASH_MS, game_white);
             if (game_poll_press(&row, &col))
             {
                 return;

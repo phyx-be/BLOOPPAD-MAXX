@@ -11,6 +11,8 @@
 #define GAME_ROWS     BOARD_ROWS
 #define GAME_COLS     BOARD_COLS
 #define GAME_FRAME_MS (20) /* duration of one game frame */
+#define GAME_TEXT_ROWS (5)  /* height of the scrolling text */
+#define GAME_TEXT_TOP  (2)  /* the text is always in rows 2 .. 6 */
 
 /* bit in a button matrix row byte for the given column */
 #define GAME_BUTTON(col) BOARD_BUTTON(col)
@@ -47,7 +49,7 @@ uint8_t game_poll_press(uint8_t *row, uint8_t *col);
 void game_seed_random(uint32_t seed);
 uint32_t game_random(void);
 void game_set_led(uint8_t row, uint8_t col, game_color_t color);
-void game_render_text(const char *text, uint32_t elapsed_ms, game_color_t color, uint8_t top_row);
+void game_render_text(const char *text, uint32_t elapsed_ms, game_color_t color);
 
 /* shared screens of the two player games, implemented in games.c */
 uint8_t game_other_player(uint8_t player);

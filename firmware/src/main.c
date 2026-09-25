@@ -69,7 +69,7 @@ static void show_version(void)
 /* draw the menu on the first row and the text below it, the selected item blinks */
 static void render_menu(const char *text, uint8_t selected, uint32_t elapsed_ms)
 {
-    game_render_text(text, elapsed_ms, menu_text_color, 1);
+    game_render_text(text, elapsed_ms, menu_text_color);
     for (int col = 0; col < GAME_COLS; col++)
     {
         uint8_t blink_off = (col == selected) && (elapsed_ms % MENU_BLINK_MS) >= (MENU_BLINK_MS / 2);
