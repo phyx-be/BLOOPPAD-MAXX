@@ -62,6 +62,7 @@ void connect_four_run(void);
 void button_masher_run(void);
 void tug_of_war_run(void);
 void rainbow_run(void);
+void life_run(void);
 void midi_run(void); /* never returns */
 
 #endif /* __GAMES_H */
