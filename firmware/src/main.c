@@ -27,6 +27,7 @@ static const menu_item_t menu[GAME_COLS] = {
     [3] = {.run = rainbow_run, .name = "RAINBOW", .color = {.r = 0, .g = 255, .b = 0}},
     [4] = {.run = life_run, .name = "GAME OF LIFE", .color = {.r = 255, .g = 100, .b = 0}},
     [5] = {.run = tetris_run, .name = "TETRIS", .color = {.r = 255, .g = 0, .b = 0}},
+    [6] = {.run = battleships_run, .name = "BATTLESHIPS", .color = {.r = 0, .g = 0, .b = 255}},
     [MENU_COL_MIDI] = {.run = midi_run, .name = "MIDI", .color = {.r = 255, .g = 255, .b = 255}},
 };
 
