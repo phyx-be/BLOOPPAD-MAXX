@@ -68,5 +68,6 @@ void life_run(void);
 void tetris_run(void);
 void battleships_run(void);
 void midi_run(void); /* never returns */
+void midi_poll(void);
 
 #endif /* __GAMES_H */

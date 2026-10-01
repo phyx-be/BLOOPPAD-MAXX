@@ -106,6 +106,8 @@ static void startup(void)
             case STARTUP_CONFIRM:
                 render_menu(startup_state == STARTUP_CHOOSE ? "CHOOSE GAME" : menu[selected].name, selected, game_millis() - start);
                 game_frame();
+                /* the host can send SysEx commands (e.g. reboot into the bootloader) while in the menu */
+                midi_poll();
 
                 if (!game_poll_press(&row, &col) || row != 0 || !menu[col].run)
                 {

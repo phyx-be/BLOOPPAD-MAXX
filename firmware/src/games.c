@@ -1,7 +1,6 @@
 #include <string.h> /* memset() */
 
 #include "debug.h"
-#include "bootloader.h"
 #include "games.h"
 
 #define TEXT_GLYPH_ROWS   GAME_TEXT_ROWS
@@ -90,12 +89,6 @@ void game_frame(void)
     board_show_leds();
     Delay_Ms(GAME_FRAME_MS);
     millis += GAME_FRAME_MS;
-
-    /* Every mode but MIDI runs through here, and none of them read USB, so this
-     * is where the host's "reboot into ISP" request gets noticed - see
-     * bootloader.h. MIDI mode reads USB itself and hands packets over directly,
-     * so it must not be drained twice. */
-    bootloader_poll_usb();
 }
 
 /* approximate time since the game started, advanced by game_frame() */
