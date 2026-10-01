@@ -80,6 +80,29 @@ F0 13 37 <led> <red> <green> <blue> F7
 
 The first byte `0xF0` indicates the start of a SysEx MIDI message. Byte 2 and 3 indicate a manufacturer ID (`0x1337` in our case). The 4th byte is the LED index as described above. The next 3 bytes are the `red`, `green` and `blue` bytes. Their value can be max `0x7F` in a MIDI SysEx message, so make sure you right-shift your RGB data before sending. The last byte `0xF7` indicates the end of the SysEx message.
 
+#### Reboot into the bootloader
+
+One SysEx message is not an LED update:
+
+```
+F0 13 37 00 42 4F 4F F7
+```
+
+It reboots the pad into WCH's ISP bootloader, so a reflash needs neither the boot
+button nor a replug - see "Flashing" below. `0x00` sits where an LED frame carries
+its first LED index, and `0x00` is never a valid index (the low nibble of an index
+is always `8`-`15`), so the two cannot be confused; firmware without this command
+ignores the message rather than painting anything. The trailing `42 4F 4F` ("BOO")
+is there so the command is a deliberate eight-byte sequence rather than a short one
+that might turn up by chance.
+
+It works in every mode, not only MIDI mode. Two cautions:
+
+- **Any MIDI software on the host could send it.** A spurious trigger is
+  recoverable without tools, because the bootloader runs the application again
+  after a few seconds if no upload starts - it costs a reboot, not a brick.
+- **The host must start the upload immediately**, for the same reason.
+
 ### I2C
 
 The BloopPad Maxx has I2C address `0x55` and uses the following registers to interface/control with its connected peripherals:
@@ -100,7 +123,9 @@ pio run -e debug
 
 ### Flashing
 
-The easiest way to flash the BloopPad is using the USB port and a tool like [wchisp](https://github.com/ch32-rs/wchisp). First, disconnect the USB cable. While pressing the boot button on the board, reconnect the USB cable. Then run:
+The easiest way is the web playground: open its **Flash firmware** panel, connect the pad, and press Flash. It sends the SysEx above to reboot the pad into ISP, then writes and verifies over WebUSB - no boot button, no replug.
+
+From a shell with [wchisp](https://github.com/ch32-rs/wchisp): send `F0 13 37 00 42 4F 4F F7` to the pad with any MIDI tool to put it into ISP, or - if the firmware does not run or does not enumerate - disconnect the USB cable, hold the boot button on the board, and reconnect it. Then run:
 
 ```
 wchisp flash <path to the firmware.bin file>

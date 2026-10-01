@@ -5,6 +5,7 @@
 
 #include <wch_usbmidi_internal.h>
 
+#include "bootloader.h"
 #include "debug.h"
 #include "games.h"
 
@@ -303,6 +304,9 @@ void midi_run(void)
         {
             if (USB_read(midi_pkt, 4) == 4)
             {
+                /* Same request, same single implementation: this mode owns the USB
+                 * reads, so game_frame()'s poll never sees them - see bootloader.h. */
+                bootloader_feed_midi(midi_pkt[0], midi_pkt[1], midi_pkt[2], midi_pkt[3]);
                 handle_midi(midi_pkt[0] & MIDI_CIN_MASK, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
             }
         }
