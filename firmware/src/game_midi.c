@@ -3,6 +3,7 @@
  */
 #include <string.h> /* memcpy(), memcmp() */
 
+#include <ch32x035.h> /* SystemReset_StartMode(), NVIC_SystemReset() */
 #include <wch_usbmidi_internal.h>
 
 #include "debug.h"
@@ -38,6 +39,13 @@
 /* SysEx manufacturer ID bytes identifying our custom BloopPad Maxx LED protocol */
 #define SYSEX_MANUFACTURER_ID_1 (0x13)
 #define SYSEX_MANUFACTURER_ID_2 (0x37)
+
+/* SysEx command to reboot into the ISP bootloader: F0 13 37 00 42 4F 4F F7
+ * 0x00 can never be an LED index (the low nibble of an index is 0x08-0x0F), "BOO" makes it deliberate
+ */
+static const uint8_t sysex_bootloader[] = {MIDI_SYSEX_START, SYSEX_MANUFACTURER_ID_1, SYSEX_MANUFACTURER_ID_2, 0x00, 0x42, 0x4F, 0x4F, MIDI_SYSEX_END};
+#define BOOTLOADER_SETTLE_MS (50) /* let the host finish the transfer before the reset */
+#define BOOTLOADER_FLASH_MS  (10) /* let the boot-mode flash write settle */
 
 /* Predefined color palette used when the host sends a CC value 1–9 to set an LED.
  * Value 0 turns the LED off.
@@ -83,8 +91,36 @@ static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value
     USBSendPacket(MIDI_CIN_CONTROL_CHANGE, MIDI_STATUS_CONTROL_CHANGE | (channel & MIDI_CHANNEL_MASK), control, value);
 }
 
+/* reboot into the ISP bootloader, never returns
+ * the bootloader runs the application again after a few seconds if no upload starts
+ */
+static void enter_bootloader(void)
+{
+    PRINT("SysEx: rebooting into the bootloader\r\n");
+
+    /* nothing refreshes the leds anymore, so dim purple shows the board is in the bootloader */
+    for (int r = 0; r < GAME_ROWS; r++)
+    {
+        for (int c = 0; c < GAME_COLS; c++)
+        {
+            board_set_led(r, c, 0x10, 0x00, 0x18);
+        }
+    }
+    board_show_leds();
+    Delay_Ms(BOOTLOADER_SETTLE_MS);
+
+    SystemReset_StartMode(Start_Mode_BOOT);
+    Delay_Ms(BOOTLOADER_FLASH_MS);
+    NVIC_SystemReset();
+}
+
 static void finalize_sysex(void)
 {
+    if (sysex_data_len == sizeof(sysex_bootloader) && memcmp(sysex_data, sysex_bootloader, sizeof(sysex_bootloader)) == 0)
+    {
+        enter_bootloader();
+    }
+
     if (sysex_data_len < 8 || (sysex_data_len % 4) != 0)
     {
         PRINT("Unsupported SysEx size: %d\r\n", sysex_data_len);
@@ -275,6 +311,21 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
     }
 }
 
+/* handle all complete USB-MIDI packets that are available, used outside of MIDI mode (e.g. the game menu)
+ * so the host can still send SysEx commands such as the bootloader reboot
+ */
+void midi_poll(void)
+{
+    uint8_t midi_pkt[4];
+
+    while (USB_available() >= 4)
+    {
+        if (USB_read(midi_pkt, 4) == 4)
+        {
+            handle_midi(midi_pkt[0] & MIDI_CIN_MASK, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
+        }
+    }
+}
 
 /* never returns */
 void midi_run(void)
@@ -299,7 +350,7 @@ void midi_run(void)
         /* take a local copy of the current button state */
         board_read_buttons(current_kb_result);
 
-        if (USB_available())
+        while (USB_available() >= 4)
         {
             if (USB_read(midi_pkt, 4) == 4)
             {
