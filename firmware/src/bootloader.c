@@ -8,15 +8,7 @@
 #include "board.h"
 #include "bootloader.h"
 #include "debug.h"
-
-/* USB-MIDI Code Index Numbers that carry SysEx bytes, USB MIDI spec table 4-1.
- * Kept local rather than shared with game_midi.c's copy, so that this file does
- * not depend on a mode that may not be running. */
-#define CIN_MASK            (0x0F)
-#define CIN_SYSEX_START     (0x04) /* SysEx starts or continues: three bytes */
-#define CIN_SYSEX_END_1BYTE (0x05) /* one byte, or a 1-byte System Common */
-#define CIN_SYSEX_END_2BYTE (0x06) /* two bytes */
-#define CIN_SYSEX_END_3BYTE (0x07) /* three bytes */
+#include "midi_packet.h"
 
 /* The one message this file reacts to. */
 static const uint8_t bootloader_request[] = {0xF0, 0x13, 0x37, 0x00, 0x42, 0x4F, 0x4F, 0xF7};
@@ -58,29 +50,20 @@ static void feed_byte(uint8_t b)
 
 void bootloader_feed_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 {
-    switch (cin & CIN_MASK)
+    const uint8_t bytes[3] = {b1, b2, b3};
+    uint8_t count = midi_sysex_byte_count(cin);
+
+    if (count == 0)
     {
-        case CIN_SYSEX_START:
-        case CIN_SYSEX_END_3BYTE:
-            feed_byte(b1);
-            feed_byte(b2);
-            feed_byte(b3);
-            break;
+        /* Not SysEx. Abandon any partial match: a note or a control change in the
+         * middle of our message means it was not our message. */
+        matched = 0;
+        return;
+    }
 
-        case CIN_SYSEX_END_2BYTE:
-            feed_byte(b1);
-            feed_byte(b2);
-            break;
-
-        case CIN_SYSEX_END_1BYTE:
-            feed_byte(b1);
-            break;
-
-        default:
-            /* Not SysEx. Abandon any partial match: a note or a control change in
-             * the middle of our message means it was not our message. */
-            matched = 0;
-            break;
+    for (uint8_t i = 0; i < count; i++)
+    {
+        feed_byte(bytes[i]);
     }
 }
 

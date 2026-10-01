@@ -7,34 +7,16 @@
 
 #include "bootloader.h"
 #include "debug.h"
+#include "midi_packet.h"
 #include "games.h"
 
 /* midi-usb */
 #define MIDI_CHANNEL (0)
 #define MIDI_MAX     (0x7f)
 
-/* USB-MIDI Code Index Numbers (CIN), USB MIDI spec table 4-1 */
-#define MIDI_CIN_SYSEX_START_CONT  (0x04) /* SysEx starts or continues */
-#define MIDI_CIN_SYSEX_END_1BYTE   (0x05) /* SysEx ends with following single byte, or 1-byte System Common */
-#define MIDI_CIN_SYSEX_END_2BYTE   (0x06) /* SysEx ends with following two bytes, or empty SysEx */
-#define MIDI_CIN_SYSEX_END_3BYTE   (0x07) /* SysEx ends with following three bytes */
-#define MIDI_CIN_NOTE_OFF          (0x08)
-#define MIDI_CIN_NOTE_ON           (0x09)
-#define MIDI_CIN_POLY_KEY_PRESSURE (0x0A)
-#define MIDI_CIN_CONTROL_CHANGE    (0x0B)
-#define MIDI_CIN_PROGRAM_CHANGE    (0x0C)
-#define MIDI_CIN_CHANNEL_PRESSURE  (0x0D)
-#define MIDI_CIN_PITCH_BEND        (0x0E)
-#define MIDI_CIN_SINGLE_BYTE       (0x0F) /* System Real-Time */
-#define MIDI_CIN_MASK              (0x0F)
+/* USB-MIDI CIN values and the MIDI wire bytes below live in midi_packet.h */
 
 /* MIDI channel voice/system status bytes */
-#define MIDI_STATUS_CONTROL_CHANGE (0xB0)
-#define MIDI_STATUS_BIT            (0x80) /* set on every status byte, clear on every data byte */
-#define MIDI_CHANNEL_MASK          (0x0F)
-#define MIDI_SYSEX_START           (0xF0)
-#define MIDI_SYSEX_END             (0xF7)
-#define MIDI_TUNE_REQUEST          (0xF6)
 
 /* SysEx manufacturer ID bytes identifying our custom BloopPad Maxx LED protocol */
 #define SYSEX_MANUFACTURER_ID_1 (0x13)
@@ -130,6 +112,28 @@ out:
     sysex_data_len = 0;
 }
 
+/* Would this packet's SysEx payload still fit in sysex_data[]? Replaces the
+ * per-case "MAX_SYSEX_DATA - 2" style tests, which each encoded the byte count of
+ * their own CIN by hand; midi_sysex_byte_count() now owns that. The tests are
+ * equivalent: "len < MAX - 2" before appending three bytes is "len + 3 <= MAX". */
+static uint8_t sysex_fits(uint8_t cin)
+{
+    return (uint8_t)((sysex_data_len + midi_sysex_byte_count(cin)) <= MAX_SYSEX_DATA);
+}
+
+/* Appends the SysEx stream bytes this packet carries. Callers check sysex_fits()
+ * first, because some of them only want to finalize the message when it was whole. */
+static void sysex_append(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
+{
+    const uint8_t bytes[3] = {b1, b2, b3};
+    uint8_t count = midi_sysex_byte_count(cin);
+
+    for (uint8_t i = 0; i < count; i++)
+    {
+        sysex_data[sysex_data_len++] = bytes[i];
+    }
+}
+
 static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
 {
     uint8_t channel = b1 & MIDI_CHANNEL_MASK;
@@ -221,19 +225,17 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             }
 
             /* SysEx continues — but only if b1 is not a status byte */
-            if (((in_sysex && !(b1 & MIDI_STATUS_BIT)) || b1 == MIDI_SYSEX_START) && sysex_data_len < (MAX_SYSEX_DATA - 2))
+            if (((in_sysex && !(b1 & MIDI_STATUS_BIT)) || b1 == MIDI_SYSEX_START) && sysex_fits(cin))
             {
-                sysex_data[sysex_data_len++] = b1;
-                sysex_data[sysex_data_len++] = b2;
-                sysex_data[sysex_data_len++] = b3;
+                sysex_append(cin, b1, b2, b3);
             }
 
             break;
 
         case MIDI_CIN_SYSEX_END_1BYTE: /* could be SysEx end (1-byte) OR standard 1-byte System Common (Tune Request) */
-            if (in_sysex && b1 == MIDI_SYSEX_END && sysex_data_len < MAX_SYSEX_DATA)
+            if (in_sysex && b1 == MIDI_SYSEX_END && sysex_fits(cin))
             {
-                sysex_data[sysex_data_len++] = b1;
+                sysex_append(cin, b1, b2, b3);
                 finalize_sysex();
             }
             else if (b1 == MIDI_TUNE_REQUEST)
@@ -252,20 +254,17 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
                 sysex_data_len = 0;
                 in_sysex = 0;
             }
-            else if (in_sysex && b2 == MIDI_SYSEX_END && sysex_data_len < (MAX_SYSEX_DATA - 1))
+            else if (in_sysex && b2 == MIDI_SYSEX_END && sysex_fits(cin))
             {
-                sysex_data[sysex_data_len++] = b1;
-                sysex_data[sysex_data_len++] = b2;
+                sysex_append(cin, b1, b2, b3);
                 finalize_sysex();
             }
             break;
 
         case MIDI_CIN_SYSEX_END_3BYTE:
-            if (in_sysex && b3 == MIDI_SYSEX_END && sysex_data_len < (MAX_SYSEX_DATA - 2))
+            if (in_sysex && b3 == MIDI_SYSEX_END && sysex_fits(cin))
             {
-                sysex_data[sysex_data_len++] = b1;
-                sysex_data[sysex_data_len++] = b2;
-                sysex_data[sysex_data_len++] = b3;
+                sysex_append(cin, b1, b2, b3);
                 finalize_sysex();
             }
             break;
