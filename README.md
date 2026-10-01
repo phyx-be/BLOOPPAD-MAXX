@@ -88,19 +88,11 @@ One SysEx message is not an LED update:
 F0 13 37 00 42 4F 4F F7
 ```
 
-It reboots the pad into WCH's ISP bootloader, so a reflash needs neither the boot
-button nor a replug - see "Flashing" below. `0x00` sits where an LED frame carries
-its first LED index, and `0x00` is never a valid index (the low nibble of an index
-is always `8`-`15`), so the two cannot be confused; firmware without this command
-ignores the message rather than painting anything. The trailing `42 4F 4F` ("BOO")
-is there so the command is a deliberate eight-byte sequence rather than a short one
-that might turn up by chance.
+It reboots the pad into WCH's ISP bootloader, so a reflash needs neither the boot button nor a replug - see "Flashing" below. `0x00` sits where an LED frame carries its LED index, and `0x00` is never a valid index (the low nibble of an index is always `8`-`15`), so the two cannot be confused. The trailing `42 4F 4F` ("BOO") makes the command a deliberate eight-byte sequence rather than a short one that might turn up by chance. While the pad is in the bootloader, all LEDs are dim purple.
 
-It works in every mode, not only MIDI mode. Two cautions:
+The command is handled in the game menu and in MIDI mode, not while a game is running. Two cautions:
 
-- **Any MIDI software on the host could send it.** A spurious trigger is
-  recoverable without tools, because the bootloader runs the application again
-  after a few seconds if no upload starts - it costs a reboot, not a brick.
+- **Any MIDI software on the host could send it.** A spurious trigger is recoverable without tools, because the bootloader runs the application again after a few seconds if no upload starts - it costs a reboot, not a brick.
 - **The host must start the upload immediately**, for the same reason.
 
 ### I2C

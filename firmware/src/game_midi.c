@@ -3,24 +3,49 @@
  */
 #include <string.h> /* memcpy(), memcmp() */
 
+#include <ch32x035.h> /* SystemReset_StartMode(), NVIC_SystemReset() */
 #include <wch_usbmidi_internal.h>
 
-#include "bootloader.h"
 #include "debug.h"
-#include "midi_packet.h"
 #include "games.h"
 
 /* midi-usb */
 #define MIDI_CHANNEL (0)
 #define MIDI_MAX     (0x7f)
 
-/* USB-MIDI CIN values and the MIDI wire bytes below live in midi_packet.h */
+/* USB-MIDI Code Index Numbers (CIN), USB MIDI spec table 4-1 */
+#define MIDI_CIN_SYSEX_START_CONT  (0x04) /* SysEx starts or continues */
+#define MIDI_CIN_SYSEX_END_1BYTE   (0x05) /* SysEx ends with following single byte, or 1-byte System Common */
+#define MIDI_CIN_SYSEX_END_2BYTE   (0x06) /* SysEx ends with following two bytes, or empty SysEx */
+#define MIDI_CIN_SYSEX_END_3BYTE   (0x07) /* SysEx ends with following three bytes */
+#define MIDI_CIN_NOTE_OFF          (0x08)
+#define MIDI_CIN_NOTE_ON           (0x09)
+#define MIDI_CIN_POLY_KEY_PRESSURE (0x0A)
+#define MIDI_CIN_CONTROL_CHANGE    (0x0B)
+#define MIDI_CIN_PROGRAM_CHANGE    (0x0C)
+#define MIDI_CIN_CHANNEL_PRESSURE  (0x0D)
+#define MIDI_CIN_PITCH_BEND        (0x0E)
+#define MIDI_CIN_SINGLE_BYTE       (0x0F) /* System Real-Time */
+#define MIDI_CIN_MASK              (0x0F)
 
 /* MIDI channel voice/system status bytes */
+#define MIDI_STATUS_CONTROL_CHANGE (0xB0)
+#define MIDI_STATUS_BIT            (0x80) /* set on every status byte, clear on every data byte */
+#define MIDI_CHANNEL_MASK          (0x0F)
+#define MIDI_SYSEX_START           (0xF0)
+#define MIDI_SYSEX_END             (0xF7)
+#define MIDI_TUNE_REQUEST          (0xF6)
 
 /* SysEx manufacturer ID bytes identifying our custom BloopPad Maxx LED protocol */
 #define SYSEX_MANUFACTURER_ID_1 (0x13)
 #define SYSEX_MANUFACTURER_ID_2 (0x37)
+
+/* SysEx command to reboot into the ISP bootloader: F0 13 37 00 42 4F 4F F7
+ * 0x00 can never be an LED index (the low nibble of an index is 0x08-0x0F), "BOO" makes it deliberate
+ */
+static const uint8_t sysex_bootloader[] = {MIDI_SYSEX_START, SYSEX_MANUFACTURER_ID_1, SYSEX_MANUFACTURER_ID_2, 0x00, 0x42, 0x4F, 0x4F, MIDI_SYSEX_END};
+#define BOOTLOADER_SETTLE_MS (50) /* let the host finish the transfer before the reset */
+#define BOOTLOADER_FLASH_MS  (10) /* let the boot-mode flash write settle */
 
 /* Predefined color palette used when the host sends a CC value 1–9 to set an LED.
  * Value 0 turns the LED off.
@@ -66,8 +91,36 @@ static void USBSendControlChange(uint8_t channel, uint8_t control, uint8_t value
     USBSendPacket(MIDI_CIN_CONTROL_CHANGE, MIDI_STATUS_CONTROL_CHANGE | (channel & MIDI_CHANNEL_MASK), control, value);
 }
 
+/* reboot into the ISP bootloader, never returns
+ * the bootloader runs the application again after a few seconds if no upload starts
+ */
+static void enter_bootloader(void)
+{
+    PRINT("SysEx: rebooting into the bootloader\r\n");
+
+    /* nothing refreshes the leds anymore, so dim purple shows the board is in the bootloader */
+    for (int r = 0; r < GAME_ROWS; r++)
+    {
+        for (int c = 0; c < GAME_COLS; c++)
+        {
+            board_set_led(r, c, 0x10, 0x00, 0x18);
+        }
+    }
+    board_show_leds();
+    Delay_Ms(BOOTLOADER_SETTLE_MS);
+
+    SystemReset_StartMode(Start_Mode_BOOT);
+    Delay_Ms(BOOTLOADER_FLASH_MS);
+    NVIC_SystemReset();
+}
+
 static void finalize_sysex(void)
 {
+    if (sysex_data_len == sizeof(sysex_bootloader) && memcmp(sysex_data, sysex_bootloader, sizeof(sysex_bootloader)) == 0)
+    {
+        enter_bootloader();
+    }
+
     if (sysex_data_len < 8 || (sysex_data_len % 4) != 0)
     {
         PRINT("Unsupported SysEx size: %d\r\n", sysex_data_len);
@@ -110,28 +163,6 @@ static void finalize_sysex(void)
 out:
     in_sysex = 0;
     sysex_data_len = 0;
-}
-
-/* Would this packet's SysEx payload still fit in sysex_data[]? Replaces the
- * per-case "MAX_SYSEX_DATA - 2" style tests, which each encoded the byte count of
- * their own CIN by hand; midi_sysex_byte_count() now owns that. The tests are
- * equivalent: "len < MAX - 2" before appending three bytes is "len + 3 <= MAX". */
-static uint8_t sysex_fits(uint8_t cin)
-{
-    return (uint8_t)((sysex_data_len + midi_sysex_byte_count(cin)) <= MAX_SYSEX_DATA);
-}
-
-/* Appends the SysEx stream bytes this packet carries. Callers check sysex_fits()
- * first, because some of them only want to finalize the message when it was whole. */
-static void sysex_append(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
-{
-    const uint8_t bytes[3] = {b1, b2, b3};
-    uint8_t count = midi_sysex_byte_count(cin);
-
-    for (uint8_t i = 0; i < count; i++)
-    {
-        sysex_data[sysex_data_len++] = bytes[i];
-    }
 }
 
 static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
@@ -225,17 +256,19 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
             }
 
             /* SysEx continues — but only if b1 is not a status byte */
-            if (((in_sysex && !(b1 & MIDI_STATUS_BIT)) || b1 == MIDI_SYSEX_START) && sysex_fits(cin))
+            if (((in_sysex && !(b1 & MIDI_STATUS_BIT)) || b1 == MIDI_SYSEX_START) && sysex_data_len < (MAX_SYSEX_DATA - 2))
             {
-                sysex_append(cin, b1, b2, b3);
+                sysex_data[sysex_data_len++] = b1;
+                sysex_data[sysex_data_len++] = b2;
+                sysex_data[sysex_data_len++] = b3;
             }
 
             break;
 
         case MIDI_CIN_SYSEX_END_1BYTE: /* could be SysEx end (1-byte) OR standard 1-byte System Common (Tune Request) */
-            if (in_sysex && b1 == MIDI_SYSEX_END && sysex_fits(cin))
+            if (in_sysex && b1 == MIDI_SYSEX_END && sysex_data_len < MAX_SYSEX_DATA)
             {
-                sysex_append(cin, b1, b2, b3);
+                sysex_data[sysex_data_len++] = b1;
                 finalize_sysex();
             }
             else if (b1 == MIDI_TUNE_REQUEST)
@@ -254,17 +287,20 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
                 sysex_data_len = 0;
                 in_sysex = 0;
             }
-            else if (in_sysex && b2 == MIDI_SYSEX_END && sysex_fits(cin))
+            else if (in_sysex && b2 == MIDI_SYSEX_END && sysex_data_len < (MAX_SYSEX_DATA - 1))
             {
-                sysex_append(cin, b1, b2, b3);
+                sysex_data[sysex_data_len++] = b1;
+                sysex_data[sysex_data_len++] = b2;
                 finalize_sysex();
             }
             break;
 
         case MIDI_CIN_SYSEX_END_3BYTE:
-            if (in_sysex && b3 == MIDI_SYSEX_END && sysex_fits(cin))
+            if (in_sysex && b3 == MIDI_SYSEX_END && sysex_data_len < (MAX_SYSEX_DATA - 2))
             {
-                sysex_append(cin, b1, b2, b3);
+                sysex_data[sysex_data_len++] = b1;
+                sysex_data[sysex_data_len++] = b2;
+                sysex_data[sysex_data_len++] = b3;
                 finalize_sysex();
             }
             break;
@@ -275,6 +311,21 @@ static void handle_midi(uint8_t cin, uint8_t b1, uint8_t b2, uint8_t b3)
     }
 }
 
+/* handle all complete USB-MIDI packets that are available, used outside of MIDI mode (e.g. the game menu)
+ * so the host can still send SysEx commands such as the bootloader reboot
+ */
+void midi_poll(void)
+{
+    uint8_t midi_pkt[4];
+
+    while (USB_available() >= 4)
+    {
+        if (USB_read(midi_pkt, 4) == 4)
+        {
+            handle_midi(midi_pkt[0] & MIDI_CIN_MASK, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
+        }
+    }
+}
 
 /* never returns */
 void midi_run(void)
@@ -299,13 +350,10 @@ void midi_run(void)
         /* take a local copy of the current button state */
         board_read_buttons(current_kb_result);
 
-        if (USB_available())
+        while (USB_available() >= 4)
         {
             if (USB_read(midi_pkt, 4) == 4)
             {
-                /* Same request, same single implementation: this mode owns the USB
-                 * reads, so game_frame()'s poll never sees them - see bootloader.h. */
-                bootloader_feed_midi(midi_pkt[0], midi_pkt[1], midi_pkt[2], midi_pkt[3]);
                 handle_midi(midi_pkt[0] & MIDI_CIN_MASK, midi_pkt[1], midi_pkt[2], midi_pkt[3]);
             }
         }
