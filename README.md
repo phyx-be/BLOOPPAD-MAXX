@@ -1,7 +1,9 @@
 # BLOOPAD-MAXX
 an illuminated 8x8 keypad with a cheap USB microcontroller.
 
-![Picture of the PCB](media/BloopPad-MAXX_PCB.jpg)
+![Picture of the PCB](media/BloopPad-MAXX_Rainbow.jpg)
+
+![Picture of the PCB](media/BloopPad-MAXX_Exposed.jpg)
 
 ## Hardware
 
@@ -13,7 +15,18 @@ There are 4 pins at the top to interact with a microcontroller using I2C:
 
 > Caution: BloopPad Maxx runs at 5V! So you might need to add a level translator for the I2C pins.
 
-There are 64 WS2812c LEDs, each using around 25–30 mA, so we need around 2A from the host. To request 5V3A from the host, the 5K1 CC resistors are mounted on the USB-C connector.
+There are 64 WS2812c LEDs, each using around 25–30 mA, so we need around 2A from the host. To request 5V3A from the host, the 5K1 CC resistors are mounted on the USB-C connector. 
+
+> ⚠️⚠️⚠️ The board however has no way of knowing if the USB port can supply that power. So limiting the total brightness of the LEDs might be required!
+
+### Rev 00
+
+![Picture of the PCB](media/BloopPad-MAXX_PCB.jpg)
+The initial board design, quickly cobbled together on an evening.
+
+### Rev 01
+
+Moved some traces away from the mounting holes closest to the USB-C connector so metal screws can be used.
 
 ## Firmware
 
