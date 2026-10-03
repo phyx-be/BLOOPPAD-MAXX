@@ -115,7 +115,7 @@ pio run -e debug
 
 ### Flashing
 
-The easiest way is the web playground: open its **Flash firmware** panel, connect the pad, and press Flash. It sends the SysEx above to reboot the pad into ISP, then writes and verifies over WebUSB - no boot button, no replug.
+The easiest way is [the web playground](https://drskunk.github.io/blooppad-maxx-playground/): open its **Flash firmware** panel, connect the pad, and press Flash. It sends the SysEx above to reboot the pad into ISP, then writes and verifies over WebUSB - no boot button, no replug.
 
 From a shell with [wchisp](https://github.com/ch32-rs/wchisp): send `F0 13 37 00 42 4F 4F F7` to the pad with any MIDI tool to put it into ISP, or - if the firmware does not run or does not enumerate - disconnect the USB cable, hold the boot button on the board, and reconnect it. Then run:
 
@@ -128,3 +128,7 @@ Or using Platformio:
 ```
 pio run -e debug -t upload
 ```
+
+## Playing
+
+Beside playing with the built-in apps, you can thinker with the board using the [the web playground](https://drskunk.github.io/blooppad-maxx-playground/) or use it as a sequencer or sample pad on the [Fri3d Scatcher](https://fri3dcamp.github.io/fri3d-scratcher/) website.
