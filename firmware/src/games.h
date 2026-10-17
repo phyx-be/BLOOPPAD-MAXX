@@ -56,6 +56,7 @@ uint8_t game_other_player(uint8_t player);
 uint8_t game_select_players(void);
 game_difficulty_t game_select_difficulty(void);
 void game_show_result(uint8_t winner);
+void game_show_text(const char *text, game_color_t color); /* scrolls until a button is pressed */
 game_color_t game_scale_color(game_color_t color, uint8_t percent);
 void game_render_rope(uint8_t edge, uint8_t percent);
 
@@ -67,6 +68,14 @@ void rainbow_run(void);
 void life_run(void);
 void tetris_run(void);
 void battleships_run(void);
+void othello_run(void);
+void minesweeper_run(void);
+void lights_out_run(void);
+void mastermind_run(void);
+void paddle_run(void);
+void whack_a_mole_run(void);
+void rhythm_run(void);
+void twister_run(void);
 void midi_run(void); /* never returns */
 void midi_poll(void);
 
