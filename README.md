@@ -147,4 +147,6 @@ pio run -e debug -t upload
 
 ## Playing
 
+The game menu shows every mode as a colored button: the original games on the top row, the newer games (Minesweeper, Mastermind, Paddle duel, Finger twister, ...) on the bottom row. Press a button once to select it, again to start it. See [GAMES.md](GAMES.md) for the full manual.
+
 Beside playing with the built-in apps, you can thinker with the board using the [the web playground](https://drskunk.github.io/blooppad-maxx-playground/) or use it as a sequencer or sample pad on the [Fri3d Scatcher](https://fri3dcamp.github.io/fri3d-scratcher/) website.

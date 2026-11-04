@@ -8,7 +8,7 @@
 #include "games.h"
 
 #define VERSION_SHOW_MS (2000) /* how long the firmware version is shown at startup */
-#define MENU_COL_MIDI   (GAME_COLS - 1)
+#define MENU_ROWS       (2)    /* the menu: the top and the bottom row */
 #define MENU_NONE       (0xff) /* nothing selected in the menu yet */
 #define MENU_BLINK_MS   (500)  /* blink period of the selected menu button */
 
@@ -19,16 +19,30 @@ typedef struct
     game_color_t color;
 } menu_item_t;
 
-/* the startup menu on the first row, indexed by column */
-static const menu_item_t menu[GAME_COLS] = {
-    [0] = {.run = connect_four_run, .name = "CONNECT 4", .color = {.r = 255, .g = 255, .b = 0}},
-    [1] = {.run = button_masher_run, .name = "MASHER", .color = {.r = 255, .g = 0, .b = 255}},
-    [2] = {.run = tug_of_war_run, .name = "TUG OF WAR", .color = {.r = 0, .g = 255, .b = 255}},
-    [3] = {.run = rainbow_run, .name = "RAINBOW", .color = {.r = 0, .g = 255, .b = 0}},
-    [4] = {.run = life_run, .name = "GAME OF LIFE", .color = {.r = 255, .g = 100, .b = 0}},
-    [5] = {.run = tetris_run, .name = "TETRIS", .color = {.r = 255, .g = 0, .b = 0}},
-    [6] = {.run = battleships_run, .name = "BATTLESHIPS", .color = {.r = 0, .g = 0, .b = 255}},
-    [MENU_COL_MIDI] = {.run = midi_run, .name = "MIDI", .color = {.r = 255, .g = 255, .b = 255}},
+/* the startup menu: the original games on the top row, the new ones on the
+ * bottom row, indexed by [menu row][column]
+ */
+static const menu_item_t menu[MENU_ROWS][GAME_COLS] = {
+    {
+        [0] = {.run = connect_four_run, .name = "CONNECT 4", .color = {.r = 255, .g = 255, .b = 0}},
+        [1] = {.run = button_masher_run, .name = "MASHER", .color = {.r = 255, .g = 0, .b = 255}},
+        [2] = {.run = tug_of_war_run, .name = "TUG OF WAR", .color = {.r = 0, .g = 255, .b = 255}},
+        [3] = {.run = rainbow_run, .name = "RAINBOW", .color = {.r = 0, .g = 255, .b = 0}},
+        [4] = {.run = life_run, .name = "GAME OF LIFE", .color = {.r = 255, .g = 100, .b = 0}},
+        [5] = {.run = tetris_run, .name = "TETRIS", .color = {.r = 255, .g = 0, .b = 0}},
+        [6] = {.run = battleships_run, .name = "BATTLESHIPS", .color = {.r = 0, .g = 0, .b = 255}},
+        [7] = {.run = othello_run, .name = "OTHELLO", .color = {.r = 0, .g = 255, .b = 128}},
+    },
+    {
+        [0] = {.run = minesweeper_run, .name = "MINESWEEPER", .color = {.r = 255, .g = 0, .b = 128}},
+        [1] = {.run = lights_out_run, .name = "LIGHTS OUT", .color = {.r = 128, .g = 128, .b = 255}},
+        [2] = {.run = mastermind_run, .name = "MASTERMIND", .color = {.r = 160, .g = 0, .b = 255}},
+        [3] = {.run = paddle_run, .name = "PADDLE DUEL", .color = {.r = 255, .g = 128, .b = 128}},
+        [4] = {.run = whack_a_mole_run, .name = "WHACK A MOLE", .color = {.r = 128, .g = 255, .b = 0}},
+        [5] = {.run = rhythm_run, .name = "RHYTHM TAP", .color = {.r = 255, .g = 200, .b = 0}},
+        [6] = {.run = twister_run, .name = "FINGER TWISTER", .color = {.r = 0, .g = 200, .b = 255}},
+        [7] = {.run = midi_run, .name = "MIDI", .color = {.r = 255, .g = 255, .b = 255}},
+    },
 };
 
 static const game_color_t menu_text_color = {.r = 255, .g = 255, .b = 255};
@@ -67,28 +81,37 @@ static void show_version(void)
     Delay_Ms(VERSION_SHOW_MS);
 }
 
-/* draw the menu on the first row and the text below it, the selected item blinks */
-static void render_menu(const char *text, uint8_t selected, uint32_t elapsed_ms)
+/* draw the menu on the top and bottom row with the text in between,
+ * the selected item blinks
+ */
+static void render_menu(const char *text, uint8_t selected_menu_row, uint8_t selected_col, uint32_t elapsed_ms)
 {
     game_render_text(text, elapsed_ms, menu_text_color);
-    for (int col = 0; col < GAME_COLS; col++)
+    for (int menu_row = 0; menu_row < MENU_ROWS; menu_row++)
     {
-        uint8_t blink_off = (col == selected) && (elapsed_ms % MENU_BLINK_MS) >= (MENU_BLINK_MS / 2);
-        if (menu[col].run && !blink_off)
+        for (int col = 0; col < GAME_COLS; col++)
         {
-            game_set_led(0, col, menu[col].color);
+            uint8_t blink_off = (menu_row == selected_menu_row) && (col == selected_col) && (elapsed_ms % MENU_BLINK_MS) >= (MENU_BLINK_MS / 2);
+            if (menu[menu_row][col].run && !blink_off)
+            {
+                game_set_led(menu_row == 0 ? 0 : GAME_ROWS - 1, col, menu[menu_row][col].color);
+            }
         }
     }
 }
 
-/* the startup flow: show the version, let the user pick a game on the first row and confirm it */
+/* the startup flow: show the version, let the user pick a game on the top or
+ * the bottom row and confirm it
+ */
 static void startup(void)
 {
     startup_state_t startup_state = STARTUP_VERSION;
-    uint8_t selected = MENU_NONE;
+    uint8_t selected_menu_row = MENU_NONE;
+    uint8_t selected_col = MENU_NONE;
     uint32_t start = 0;
     uint8_t row;
     uint8_t col;
+    uint8_t menu_row;
 
     while (1)
     {
@@ -104,34 +127,43 @@ static void startup(void)
 
             case STARTUP_CHOOSE:
             case STARTUP_CONFIRM:
-                render_menu(startup_state == STARTUP_CHOOSE ? "CHOOSE GAME" : menu[selected].name, selected, game_millis() - start);
+                render_menu(startup_state == STARTUP_CHOOSE ? "CHOOSE GAME" : menu[selected_menu_row][selected_col].name, selected_menu_row, selected_col, game_millis() - start);
                 game_frame();
                 /* the host can send SysEx commands (e.g. reboot into the bootloader) while in the menu */
                 midi_poll();
 
-                if (!game_poll_press(&row, &col) || row != 0 || !menu[col].run)
+                if (!game_poll_press(&row, &col))
                 {
                     break;
                 }
 
-                if (startup_state == STARTUP_CONFIRM && col == selected)
+                /* the menu lives on the top and the bottom row */
+                menu_row = row == 0 ? 0 : row == GAME_ROWS - 1 ? 1 : 0xff;
+
+                if (menu_row == 0xff || !menu[menu_row][col].run)
+                {
+                    break;
+                }
+
+                if (startup_state == STARTUP_CONFIRM && menu_row == selected_menu_row && col == selected_col)
                 {
                     startup_state = STARTUP_RUN;
                 }
                 else
                 {
                     /* (re)select, restart the text and the blinking */
-                    selected = col;
+                    selected_menu_row = menu_row;
+                    selected_col = col;
                     start = game_millis();
                     startup_state = STARTUP_CONFIRM;
                 }
                 break;
 
             case STARTUP_RUN:
-                PRINT("starting %s\r\n", menu[selected].name);
+                PRINT("starting %s\r\n", menu[selected_menu_row][selected_col].name);
                 /* the moment of the press is the best source of randomness we have */
                 game_seed_random(game_millis() * 2654435761u);
-                menu[selected].run();
+                menu[selected_menu_row][selected_col].run();
 
                 /* the game is over: keep it selected, so one press plays it again;
                  * the button that ended the game only counts after a release

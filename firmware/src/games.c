@@ -290,14 +290,12 @@ game_difficulty_t game_select_difficulty(void)
     }
 }
 
-/* scroll the winner (or "DRAW") until a button is pressed */
-void game_show_result(uint8_t winner)
+/* scroll a text until a button is pressed, used for the result of single player games */
+void game_show_text(const char *text, game_color_t color)
 {
     uint8_t row;
     uint8_t col;
     uint32_t start = game_millis();
-    const char *text = winner == GAME_PLAYER_RED ? "RED WINS" : winner == GAME_PLAYER_BLUE ? "BLUE WINS" : "DRAW";
-    game_color_t color = winner == GAME_PLAYER_DRAW ? game_white : game_player_colors[winner - 1];
 
     while (1)
     {
@@ -313,6 +311,15 @@ void game_show_result(uint8_t winner)
             return;
         }
     }
+}
+
+/* scroll the winner (or "DRAW") until a button is pressed */
+void game_show_result(uint8_t winner)
+{
+    const char *text = winner == GAME_PLAYER_RED ? "RED WINS" : winner == GAME_PLAYER_BLUE ? "BLUE WINS" : "DRAW";
+    game_color_t color = winner == GAME_PLAYER_DRAW ? game_white : game_player_colors[winner - 1];
+
+    game_show_text(text, color);
 }
 
 game_color_t game_scale_color(game_color_t color, uint8_t percent)
